@@ -159,6 +159,7 @@ void writeRosbag(const std::shared_ptr<DataCluster> data_cluster,
         msg.ephemerides.push_back(e);
       }
       for (int i = 0; i < MAXPRNGLO; i++) {
+        if (nav->geph == nullptr) continue;
         geph_t *geph = nav->geph + i;
         if (geph->sat == 0) continue;
         gici_ros::GlonassEphemeris e;
