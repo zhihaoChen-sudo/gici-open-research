@@ -8,9 +8,70 @@
 **/
 #include "gici/fusion/rtk_imu_camera_rrr_estimator.h"
 
+#include <algorithm>
+#include <cmath>
+#include <iomanip>
+#include <vector>
+
 #include "gici/gnss/position_error.h"
+#include "gici/imu/hmc_error.h"
+#include "gici/imu/imu_error.h"
+#include "gici/imu/nhc_error.h"
+#include "gici/utility/global_variable.h"
+#include "gici/vision/reprojection_error.h"
 
 namespace gici {
+
+namespace {
+
+void createDiagnosticLogger(
+  std::ofstream& logger, const std::string& directory,
+  const std::string& prefix, const std::string& header)
+{
+  const double time = vk::Timer::getCurrentTime();
+  double ep[6];
+  char buf[32];
+  time2epoch(gnss_common::doubleToGtime(time), ep);
+  sprintf(buf, "%04d%02d%02d-%02d%02d%02d",
+    (int)ep[0], (int)ep[1], (int)ep[2], (int)ep[3], (int)ep[4], (int)ep[5]);
+  logger.open(directory + "/" + prefix + "-" + buf + ".csv",
+    std::ios::out | std::ios::trunc);
+  if (!logger.is_open()) {
+    LOG(WARNING) << "Cannot open " << prefix << " diagnostic logger.";
+    return;
+  }
+  logger << std::setprecision(15);
+  logger << header << '\n';
+}
+
+std::set<uint64_t> collectGnssResidualIds(
+  const std::shared_ptr<Graph>& graph, const State& state, const ErrorType type)
+{
+  std::set<uint64_t> residual_ids;
+  for (const Graph::ResidualBlockSpec& residual :
+       graph->residuals(state.id_in_graph.asInteger())) {
+    if (residual.error_interface_ptr &&
+        residual.error_interface_ptr->typeInfo() == type) {
+      residual_ids.insert(reinterpret_cast<uint64_t>(residual.residual_block_id));
+    }
+  }
+  return residual_ids;
+}
+
+const char* gnssSolutionStatusString(const GnssSolutionStatus status)
+{
+  switch (status) {
+    case GnssSolutionStatus::None: return "NONE";
+    case GnssSolutionStatus::Single: return "SINGLE";
+    case GnssSolutionStatus::DGNSS: return "DGNSS";
+    case GnssSolutionStatus::Float: return "FLOAT";
+    case GnssSolutionStatus::Fixed: return "FIX";
+    case GnssSolutionStatus::DeadReckoning: return "DEAD_RECKONING";
+  }
+  return "UNKNOWN";
+}
+
+}  // namespace
 
 // The default constructor
 RtkImuCameraRrrEstimator::RtkImuCameraRrrEstimator(
@@ -57,11 +118,340 @@ RtkImuCameraRrrEstimator::RtkImuCameraRrrEstimator(
   sub_gnss_base_options.use_outlier_rejection = false;
   ambiguity_covariance_estimator_.reset(new RtkEstimator(sub_rtk_options, 
     sub_gnss_base_options, sub_base_options, ambiguity_options));
+
+  if (base_options_.log_intermediate_data) {
+    createGnssResidualDiagnosticsLogger(
+      base_options_.log_intermediate_data_directory);
+    createDiagnosticLoggers();
+  }
 }
 
 // The default destructor
 RtkImuCameraRrrEstimator::~RtkImuCameraRrrEstimator()
-{}
+{
+  freeGnssResidualDiagnosticsLogger();
+  visual_residual_diagnostics_logger_.close();
+  imu_residual_diagnostics_logger_.close();
+  motion_constraint_diagnostics_logger_.close();
+  gnss_rejection_events_logger_.close();
+  rrr_epoch_diagnostics_logger_.close();
+}
+
+void RtkImuCameraRrrEstimator::createDiagnosticLoggers()
+{
+  const std::string& directory = base_options_.log_intermediate_data_directory;
+  createDiagnosticLogger(
+    visual_residual_diagnostics_logger_, directory,
+    "visual_residual_diagnostics",
+    "timestamp,residual_uid,frame_id,track_id,keypoint_index,pyramid_level,"
+    "num_observations_historical_context,stable_weight_used,normalized_u,normalized_v,"
+    "normalized_norm,q_visual,raw_u_px,raw_v_px,raw_norm_px,effective_sigma_px");
+  createDiagnosticLogger(
+    imu_residual_diagnostics_logger_, directory, "imu_residual_diagnostics",
+    "t0,t1,dt,residual_uid,white_r0,white_r1,white_r2,white_r3,white_r4,"
+    "white_r5,white_r6,white_r7,white_r8,white_r9,white_r10,white_r11,"
+    "white_r12,white_r13,white_r14,white_norm,q_imu,imu_sample_count,"
+    "mean_gyro_norm,max_gyro_norm,mean_acc_norm,max_acc_norm,end_velocity_norm,"
+    "bg_x,bg_y,bg_z,bg_norm,ba_x,ba_y,ba_z,ba_norm");
+  createDiagnosticLogger(
+    motion_constraint_diagnostics_logger_, directory,
+    "motion_constraint_diagnostics",
+    "timestamp,residual_uid,constraint_type,residual_dimension,normalized_r0,"
+    "normalized_r1,normalized_norm,q_motion,raw_r0,raw_r1,raw_norm");
+  createDiagnosticLogger(
+    gnss_rejection_events_logger_, directory, "gnss_rejection_events",
+    "timestamp,residual_uid,measurement_type,removal_stage,removal_role");
+  createDiagnosticLogger(
+    rrr_epoch_diagnostics_logger_, directory, "rrr_epoch_diagnostics",
+    "timestamp,n_pseudorange_before,n_pseudorange_after,n_pseudorange_removed,"
+    "n_pseudorange_trigger_rejected,n_phaserange_before,n_phaserange_after,"
+    "n_phaserange_removed_total,n_phaserange_removed_by_pseudorange_stage,"
+    "n_phaserange_removed_by_phaserange_stage,n_phaserange_trigger_rejected,"
+    "n_doppler_before,n_doppler_after,n_doppler_removed,"
+    "n_doppler_trigger_rejected,rejected_any,ar_attempted,"
+    "post_ar_solution_status,post_ar_success,rrr_unfix_ambiguity_reset_event");
+}
+
+void RtkImuCameraRrrEstimator::logGnssRejectionEvents(const double timestamp,
+  const std::set<uint64_t>& before, const std::set<uint64_t>& after,
+  const char* measurement_type, const char* removal_stage,
+  const char* removal_role)
+{
+  if (!gnss_rejection_events_logger_.is_open()) return;
+  for (const uint64_t residual_uid : before) {
+    if (after.find(residual_uid) != after.end()) continue;
+    gnss_rejection_events_logger_ << timestamp << ',' << residual_uid << ','
+      << measurement_type << ',' << removal_stage << ',' << removal_role << '\n';
+  }
+}
+
+void RtkImuCameraRrrEstimator::logRrrEpochDiagnostics(const double timestamp,
+  const std::set<uint64_t>& pseudorange_before,
+  const std::set<uint64_t>& pseudorange_after,
+  const std::set<uint64_t>& phaserange_before,
+  const std::set<uint64_t>& phaserange_after_pseudorange_stage,
+  const std::set<uint64_t>& phaserange_after_doppler_stage,
+  const std::set<uint64_t>& phaserange_after,
+  const std::set<uint64_t>& doppler_before,
+  const std::set<uint64_t>& doppler_after,
+  const size_t pseudorange_trigger_rejected,
+  const size_t phaserange_trigger_rejected,
+  const size_t doppler_trigger_rejected,
+  const bool ar_attempted,
+  const char* post_ar_solution_status, const char* post_ar_success,
+  const size_t rrr_unfix_ambiguity_reset_event)
+{
+  if (!rrr_epoch_diagnostics_logger_.is_open()) return;
+  const size_t pseudorange_removed =
+    pseudorange_before.size() - pseudorange_after.size();
+  const size_t phaserange_removed_total =
+    phaserange_before.size() - phaserange_after.size();
+  const size_t phaserange_removed_by_pseudorange_stage =
+    phaserange_before.size() - phaserange_after_pseudorange_stage.size();
+  const size_t phaserange_removed_by_phaserange_stage =
+    phaserange_after_doppler_stage.size() - phaserange_after.size();
+  const size_t doppler_removed = doppler_before.size() - doppler_after.size();
+  const bool rejected_any = pseudorange_trigger_rejected ||
+    phaserange_trigger_rejected || doppler_trigger_rejected ||
+    pseudorange_removed || phaserange_removed_total || doppler_removed;
+  rrr_epoch_diagnostics_logger_ << timestamp << ',' << pseudorange_before.size()
+    << ',' << pseudorange_after.size() << ',' << pseudorange_removed << ','
+    << pseudorange_trigger_rejected << ','
+    << phaserange_before.size() << ',' << phaserange_after.size() << ','
+    << phaserange_removed_total << ','
+    << phaserange_removed_by_pseudorange_stage << ','
+    << phaserange_removed_by_phaserange_stage << ','
+    << phaserange_trigger_rejected << ',' << doppler_before.size() << ','
+    << doppler_after.size() << ',' << doppler_removed << ','
+    << doppler_trigger_rejected << ',' << rejected_any << ',' << ar_attempted
+    << ',' << post_ar_solution_status << ',' << post_ar_success << ','
+    << rrr_unfix_ambiguity_reset_event << '\n';
+}
+
+void RtkImuCameraRrrEstimator::logVisualResidualDiagnostics(
+  const State& state, const FramePtr& frame)
+{
+  if (!visual_residual_diagnostics_logger_.is_open() || !frame) return;
+
+  const auto& residual_specs = graph_->residualBlockIdToResidualBlockSpecMap();
+  for (const auto& landmark : landmarks_map_) {
+    const BackendId& landmark_id = landmark.first;
+    const MapPoint& map_point = landmark.second;
+
+    for (const auto& observation : map_point.observations) {
+      const KeypointIdentifier& keypoint = observation.first;
+      if (keypoint.frame_id != frame->id()) continue;
+      if (keypoint.keypoint_index_ >= frame->numFeatures()) {
+        LOG(WARNING) << "Skip visual diagnostic residual " << observation.second
+                     << ": keypoint index is unavailable.";
+        continue;
+      }
+
+      const ceres::ResidualBlockId residual_id =
+        ceres::ResidualBlockId(observation.second);
+      const auto residual_spec = residual_specs.find(residual_id);
+      if (residual_spec == residual_specs.end() ||
+          !residual_spec->second.error_interface_ptr) {
+        LOG(WARNING) << "Skip visual diagnostic residual " << observation.second
+                     << ": residual block is unavailable.";
+        continue;
+      }
+      const std::shared_ptr<ErrorInterface>& interface =
+        residual_spec->second.error_interface_ptr;
+      if (interface->typeInfo() != ErrorType::kReprojectionError) continue;
+      const std::shared_ptr<ReprojectionError> reprojection_error =
+        std::dynamic_pointer_cast<ReprojectionError>(interface);
+      if (!reprojection_error) {
+        LOG(WARNING) << "Skip visual diagnostic residual " << observation.second
+                     << ": ReprojectionError cast failed.";
+        continue;
+      }
+
+      double normalized[2] = {0.0, 0.0};
+      if (!graph_->problem()->EvaluateResidualBlock(
+          residual_id, false, nullptr, normalized, nullptr)) {
+        LOG(WARNING) << "Skip visual diagnostic residual " << observation.second
+                     << ": residual evaluation failed.";
+        continue;
+      }
+      double raw[2] = {normalized[0], normalized[1]};
+      interface->deNormalizeResidual(raw);
+
+      const int pyramid_level = frame->level_vec_(keypoint.keypoint_index_);
+      if (pyramid_level < 0) {
+        LOG(WARNING) << "Skip visual diagnostic residual " << observation.second
+                     << ": pyramid level is invalid.";
+        continue;
+      }
+      const double covariance_u = reprojection_error->covariance()(0, 0);
+      if (covariance_u <= 0.0) {
+        LOG(WARNING) << "Skip visual diagnostic residual " << observation.second
+                     << ": reprojection covariance is non-positive.";
+        continue;
+      }
+      const double effective_sigma = std::sqrt(covariance_u);
+      const double level_scale = static_cast<double>(1 << pyramid_level);
+      const double stable_sigma =
+        visual_base_options_.stable_feature_error_std * level_scale;
+      const double regular_sigma =
+        visual_base_options_.feature_error_std * level_scale;
+      const double sigma_tolerance = 1.0e-9 * std::max(1.0,
+        std::max(std::fabs(stable_sigma), std::fabs(regular_sigma)));
+      const char* stable_weight_used = "";
+      if (std::fabs(stable_sigma - regular_sigma) > sigma_tolerance) {
+        if (std::fabs(effective_sigma - stable_sigma) <= sigma_tolerance) {
+          stable_weight_used = "1";
+        }
+        else if (std::fabs(effective_sigma - regular_sigma) <= sigma_tolerance) {
+          stable_weight_used = "0";
+        }
+      }
+      const double normalized_norm = std::sqrt(
+        normalized[0] * normalized[0] + normalized[1] * normalized[1]);
+      const double raw_norm = std::sqrt(raw[0] * raw[0] + raw[1] * raw[1]);
+
+      // MapPoint history is logging-time context, not the factor covariance source.
+      visual_residual_diagnostics_logger_
+        << state.timestamp << ',' << observation.second << ',' << keypoint.frame_id
+        << ',' << landmark_id.trackId() << ',' << keypoint.keypoint_index_ << ','
+        << pyramid_level << ',' << map_point.num_observations_historical << ','
+        << stable_weight_used << ',' << normalized[0] << ',' << normalized[1] << ','
+        << normalized_norm << ',' << normalized_norm * normalized_norm / 2.0
+        << ',' << raw[0] << ',' << raw[1] << ',' << raw_norm << ','
+        << effective_sigma << '\n';
+    }
+  }
+}
+
+void RtkImuCameraRrrEstimator::logImuResidualDiagnostics(const State& state)
+{
+  if (!imu_residual_diagnostics_logger_.is_open() ||
+      state.imu_residual_to_lhs == nullptr) return;
+
+  const ceres::ResidualBlockId residual_id = state.imu_residual_to_lhs;
+  const auto& residual_specs = graph_->residualBlockIdToResidualBlockSpecMap();
+  const auto residual_spec = residual_specs.find(residual_id);
+  if (residual_spec == residual_specs.end() ||
+      !residual_spec->second.error_interface_ptr) {
+    LOG(WARNING) << "Skip IMU diagnostic residual: residual block is unavailable.";
+    return;
+  }
+  const std::shared_ptr<ErrorInterface>& interface =
+    residual_spec->second.error_interface_ptr;
+  if (interface->typeInfo() != ErrorType::kIMUError) {
+    LOG(WARNING) << "Skip IMU diagnostic residual: unexpected error type.";
+    return;
+  }
+  const std::shared_ptr<ImuError> imu_error =
+    std::dynamic_pointer_cast<ImuError>(interface);
+  if (!imu_error) {
+    LOG(WARNING) << "Skip IMU diagnostic residual: ImuError cast failed.";
+    return;
+  }
+
+  double normalized[ImuError::kNumResiduals] = {};
+  if (!graph_->problem()->EvaluateResidualBlock(
+      residual_id, false, nullptr, normalized, nullptr)) {
+    LOG(WARNING) << "Skip IMU diagnostic residual: residual evaluation failed.";
+    return;
+  }
+  double squared_norm = 0.0;
+  for (double value : normalized) squared_norm += value * value;
+
+  const ImuMeasurements measurements = imu_error->imuMeasurements();
+  // Raw IMU samples contributing to the preintegration time interval.
+  std::vector<bool> contributing_samples(measurements.size(), false);
+  const double t0 = imu_error->t0();
+  const double t1 = imu_error->t1();
+  for (size_t i = 0; i + 1 < measurements.size(); ++i) {
+    const double overlap_start = std::max(measurements[i].timestamp, t0);
+    const double overlap_end = std::min(measurements[i + 1].timestamp, t1);
+    if (overlap_end > overlap_start) {
+      contributing_samples[i] = true;
+      contributing_samples[i + 1] = true;
+    }
+  }
+  double gyro_norm_sum = 0.0;
+  double acc_norm_sum = 0.0;
+  double max_gyro_norm = 0.0;
+  double max_acc_norm = 0.0;
+  size_t contributing_sample_count = 0;
+  for (size_t i = 0; i < measurements.size(); ++i) {
+    if (!contributing_samples[i]) continue;
+    const ImuMeasurement& measurement = measurements[i];
+    const double gyro_norm = measurement.angular_velocity.norm();
+    const double acc_norm = measurement.linear_acceleration.norm();
+    gyro_norm_sum += gyro_norm;
+    acc_norm_sum += acc_norm;
+    max_gyro_norm = std::max(max_gyro_norm, gyro_norm);
+    max_acc_norm = std::max(max_acc_norm, acc_norm);
+    contributing_sample_count++;
+  }
+  if (contributing_sample_count == 0) {
+    LOG(WARNING) << "IMU diagnostic residual has no samples contributing to "
+                 << "its preintegration interval.";
+  }
+  const double sample_count = static_cast<double>(contributing_sample_count);
+  const double mean_gyro_norm = sample_count == 0.0 ? 0.0 :
+    gyro_norm_sum / sample_count;
+  const double mean_acc_norm = sample_count == 0.0 ? 0.0 :
+    acc_norm_sum / sample_count;
+  const SpeedAndBias speed_and_bias = getSpeedAndBiasEstimate(state);
+  const Eigen::Vector3d velocity = speed_and_bias.head<3>();
+  const Eigen::Vector3d gyro_bias = speed_and_bias.segment<3>(3);
+  const Eigen::Vector3d accel_bias = speed_and_bias.tail<3>();
+
+  imu_residual_diagnostics_logger_ << imu_error->t0() << ',' << imu_error->t1()
+    << ',' << imu_error->t1() - imu_error->t0() << ','
+    << reinterpret_cast<uint64_t>(residual_id);
+  for (double value : normalized) imu_residual_diagnostics_logger_ << ',' << value;
+  imu_residual_diagnostics_logger_ << ',' << std::sqrt(squared_norm) << ','
+    << squared_norm / ImuError::kNumResiduals << ',' << contributing_sample_count << ','
+    << mean_gyro_norm << ',' << max_gyro_norm << ',' << mean_acc_norm << ','
+    << max_acc_norm << ',' << velocity.norm() << ',' << gyro_bias.x() << ','
+    << gyro_bias.y() << ',' << gyro_bias.z() << ',' << gyro_bias.norm() << ','
+    << accel_bias.x() << ',' << accel_bias.y() << ',' << accel_bias.z() << ','
+    << accel_bias.norm() << '\n';
+}
+
+void RtkImuCameraRrrEstimator::logMotionConstraintDiagnostics(const State& state)
+{
+  if (!motion_constraint_diagnostics_logger_.is_open()) return;
+
+  const auto residuals = graph_->residuals(state.id_in_graph.asInteger());
+  for (const Graph::ResidualBlockSpec& residual_spec : residuals) {
+    const std::shared_ptr<ErrorInterface>& interface =
+      residual_spec.error_interface_ptr;
+    if (!interface || (interface->typeInfo() != ErrorType::kHMCError &&
+        interface->typeInfo() != ErrorType::kNHCError)) continue;
+
+    const int residual_dimension = interface->typeInfo() == ErrorType::kHMCError ?
+      1 : 2;
+    double normalized[2] = {0.0, 0.0};
+    if (!graph_->problem()->EvaluateResidualBlock(residual_spec.residual_block_id,
+        false, nullptr, normalized, nullptr)) {
+      LOG(WARNING) << "Skip motion-constraint diagnostic residual: "
+                   << "residual evaluation failed.";
+      continue;
+    }
+    double raw[2] = {normalized[0], normalized[1]};
+    interface->deNormalizeResidual(raw);
+    const double squared_norm = normalized[0] * normalized[0] +
+      (residual_dimension == 2 ? normalized[1] * normalized[1] : 0.0);
+    const double raw_squared_norm = raw[0] * raw[0] +
+      (residual_dimension == 2 ? raw[1] * raw[1] : 0.0);
+
+    motion_constraint_diagnostics_logger_ << state.timestamp << ','
+      << reinterpret_cast<uint64_t>(residual_spec.residual_block_id) << ','
+      << (residual_dimension == 1 ? "HMC" : "NHC") << ','
+      << residual_dimension << ',' << normalized[0] << ',';
+    if (residual_dimension == 2) motion_constraint_diagnostics_logger_ << normalized[1];
+    motion_constraint_diagnostics_logger_ << ',' << std::sqrt(squared_norm) << ','
+      << squared_norm / residual_dimension << ',' << raw[0] << ',';
+    if (residual_dimension == 2) motion_constraint_diagnostics_logger_ << raw[1];
+    motion_constraint_diagnostics_logger_ << ',' << std::sqrt(raw_squared_norm) << '\n';
+  }
+}
 
 // Add measurement
 bool RtkImuCameraRrrEstimator::addMeasurement(const EstimatorDataCluster& measurement)
@@ -340,6 +730,11 @@ bool RtkImuCameraRrrEstimator::estimate()
   // Optimize
   optimize();
 
+  if (base_options_.log_intermediate_data) {
+    logImuResidualDiagnostics(states_[latest_state_index_]);
+    logMotionConstraintDiagnostics(states_[latest_state_index_]);
+  }
+
   // Get current sensor type
   IdType new_state_type = states_[latest_state_index_].id.type();
 
@@ -347,14 +742,99 @@ bool RtkImuCameraRrrEstimator::estimate()
   double gdop = 0.0;
   if (new_state_type == IdType::gPose)
   {
+    // Log optimized GNSS residuals before any outlier rejection removes them.
+    if (base_options_.log_intermediate_data) {
+      logGnssResidualDiagnostics(
+        states_[latest_state_index_], curGnssRov(), curGnssRef());
+    }
+
+    std::set<uint64_t> pseudorange_before;
+    std::set<uint64_t> phaserange_before;
+    std::set<uint64_t> doppler_before;
+    if (base_options_.log_intermediate_data) {
+      pseudorange_before = collectGnssResidualIds(
+        graph_, states_[latest_state_index_], ErrorType::kPseudorangeErrorDD);
+      phaserange_before = collectGnssResidualIds(
+        graph_, states_[latest_state_index_], ErrorType::kPhaserangeErrorDD);
+      doppler_before = collectGnssResidualIds(
+        graph_, states_[latest_state_index_], ErrorType::kDopplerError);
+    }
+
     // Reject GNSS outliers
     size_t n_pseudorange = numPseudorangeError(states_[latest_state_index_]);
     size_t n_phaserange = numPhaserangeError(states_[latest_state_index_]);
     size_t n_doppler = numDopplerError(states_[latest_state_index_]);
+    size_t n_pseudorange_trigger_rejected = 0;
+    size_t n_doppler_trigger_rejected = 0;
+    size_t n_phaserange_trigger_rejected = 0;
+    std::set<uint64_t> pseudorange_after_pseudorange_stage;
+    std::set<uint64_t> phaserange_after_pseudorange_stage;
+    std::set<uint64_t> doppler_after_pseudorange_stage;
+    std::set<uint64_t> pseudorange_after_doppler_stage;
+    std::set<uint64_t> phaserange_after_doppler_stage;
+    std::set<uint64_t> doppler_after_doppler_stage;
     if (gnss_base_options_.use_outlier_rejection) {
-      rejectPseudorangeOutlier(states_[latest_state_index_], curAmbiguityState());
-      rejectDopplerOutlier(states_[latest_state_index_]);
-      rejectPhaserangeOutlier(states_[latest_state_index_], curAmbiguityState());
+      n_pseudorange_trigger_rejected = rejectPseudorangeOutlier(
+        states_[latest_state_index_], curAmbiguityState());
+      if (base_options_.log_intermediate_data) {
+        pseudorange_after_pseudorange_stage = collectGnssResidualIds(
+          graph_, states_[latest_state_index_], ErrorType::kPseudorangeErrorDD);
+        phaserange_after_pseudorange_stage = collectGnssResidualIds(
+          graph_, states_[latest_state_index_], ErrorType::kPhaserangeErrorDD);
+        doppler_after_pseudorange_stage = collectGnssResidualIds(
+          graph_, states_[latest_state_index_], ErrorType::kDopplerError);
+        logGnssRejectionEvents(states_[latest_state_index_].timestamp,
+          pseudorange_before, pseudorange_after_pseudorange_stage,
+          "dd_pseudorange", "pseudorange", "direct_measurement_removal");
+        logGnssRejectionEvents(states_[latest_state_index_].timestamp,
+          phaserange_before, phaserange_after_pseudorange_stage,
+          "dd_phaserange", "pseudorange", "ambiguity_cascade_removal");
+      }
+      n_doppler_trigger_rejected = rejectDopplerOutlier(
+        states_[latest_state_index_]);
+      if (base_options_.log_intermediate_data) {
+        pseudorange_after_doppler_stage = collectGnssResidualIds(
+          graph_, states_[latest_state_index_], ErrorType::kPseudorangeErrorDD);
+        phaserange_after_doppler_stage = collectGnssResidualIds(
+          graph_, states_[latest_state_index_], ErrorType::kPhaserangeErrorDD);
+        doppler_after_doppler_stage = collectGnssResidualIds(
+          graph_, states_[latest_state_index_], ErrorType::kDopplerError);
+        logGnssRejectionEvents(states_[latest_state_index_].timestamp,
+          doppler_after_pseudorange_stage, doppler_after_doppler_stage,
+          "doppler", "doppler", "direct_measurement_removal");
+        if (pseudorange_after_pseudorange_stage != pseudorange_after_doppler_stage ||
+            phaserange_after_pseudorange_stage != phaserange_after_doppler_stage) {
+          LOG(WARNING) << "Unexpected GNSS cross-type removal during Doppler rejection";
+        }
+      }
+      n_phaserange_trigger_rejected = rejectPhaserangeOutlier(
+        states_[latest_state_index_], curAmbiguityState());
+      if (base_options_.log_intermediate_data) {
+        logGnssRejectionEvents(states_[latest_state_index_].timestamp,
+          phaserange_after_doppler_stage, collectGnssResidualIds(
+            graph_, states_[latest_state_index_], ErrorType::kPhaserangeErrorDD),
+          "dd_phaserange", "phaserange", "phaserange_stage_removal");
+      }
+    }
+
+    std::set<uint64_t> pseudorange_after;
+    std::set<uint64_t> phaserange_after;
+    std::set<uint64_t> doppler_after;
+    if (base_options_.log_intermediate_data) {
+      pseudorange_after = collectGnssResidualIds(
+        graph_, states_[latest_state_index_], ErrorType::kPseudorangeErrorDD);
+      phaserange_after = collectGnssResidualIds(
+        graph_, states_[latest_state_index_], ErrorType::kPhaserangeErrorDD);
+      doppler_after = collectGnssResidualIds(
+        graph_, states_[latest_state_index_], ErrorType::kDopplerError);
+      if (!gnss_base_options_.use_outlier_rejection) {
+        pseudorange_after_pseudorange_stage = pseudorange_before;
+        phaserange_after_pseudorange_stage = phaserange_before;
+        doppler_after_pseudorange_stage = doppler_before;
+        pseudorange_after_doppler_stage = pseudorange_before;
+        phaserange_after_doppler_stage = phaserange_before;
+        doppler_after_doppler_stage = doppler_before;
+      }
     }
 
     // Check if we rejected too many GNSS residuals
@@ -381,6 +861,8 @@ bool RtkImuCameraRrrEstimator::estimate()
     for (size_t i = latest_state_index_; i < states_.size(); i++) {
       states_[i].status = GnssSolutionStatus::Float;
     }
+    bool ar_attempted = false;
+    const char* post_ar_success = "";
     if (rtk_options_.use_ambiguity_resolution) {
       // get covariance of ambiguities
       Eigen::MatrixXd ambiguity_covariance;
@@ -388,9 +870,11 @@ bool RtkImuCameraRrrEstimator::estimate()
         states_[latest_state_index_], ambiguity_covariance))
       {
         // solve
+        ar_attempted = true;
         AmbiguityResolution::Result ret = ambiguity_resolution_->solveRtk(
           states_[latest_state_index_].id, curAmbiguityState().ids, 
           ambiguity_covariance, gnss_measurement_pairs_.back());
+        post_ar_success = ret == AmbiguityResolution::Result::NlFix ? "1" : "0";
         if (ret == AmbiguityResolution::Result::NlFix) {
           for (size_t i = latest_state_index_; i < states_.size(); i++) {
             states_[i].status = GnssSolutionStatus::Fixed;
@@ -400,6 +884,7 @@ bool RtkImuCameraRrrEstimator::estimate()
     }
 
     // Check if we continuously cannot fix ambiguity, while we have good observations
+    size_t ambiguity_reset_count = 0;
     if (rtk_options_.use_ambiguity_resolution) {
       const double thr = gnss_base_options_.good_observation_max_reject_ratio;
       if (isGnssGoodObservation() && ratio_pseudorange < thr && 
@@ -413,13 +898,27 @@ bool RtkImuCameraRrrEstimator::estimate()
         LOG(INFO) << "Continuously unfix under good observations. Clear current ambiguities.";
         resetAmbiguityEstimation();
         ambiguity_covariance_estimator_->resetAmbiguityEstimation();
+        ambiguity_reset_count = 1;
         num_continuous_unfix_ = 0;
       }
+    }
+    if (base_options_.log_intermediate_data) {
+      logRrrEpochDiagnostics(states_[latest_state_index_].timestamp,
+        pseudorange_before, pseudorange_after, phaserange_before,
+        phaserange_after_pseudorange_stage, phaserange_after_doppler_stage,
+        phaserange_after, doppler_before,
+        doppler_after, n_pseudorange_trigger_rejected,
+        n_phaserange_trigger_rejected, n_doppler_trigger_rejected, ar_attempted,
+        gnssSolutionStatusString(states_[latest_state_index_].status),
+        post_ar_success, ambiguity_reset_count);
     }
   }
 
   // Image processes
   if (new_state_type == IdType::cPose) {
+    if (base_options_.log_intermediate_data) {
+      logVisualResidualDiagnostics(states_[latest_state_index_], curFrame());
+    }
     // update landmarks to frontend
     updateLandmarks();
     // update states to frontend

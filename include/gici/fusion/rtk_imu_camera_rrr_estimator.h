@@ -8,6 +8,9 @@
 **/
 #pragma once
 
+#include <fstream>
+#include <set>
+
 #include "gici/gnss/gnss_estimator_base.h"
 #include "gici/imu/imu_estimator_base.h"
 #include "gici/vision/visual_estimator_base.h"
@@ -89,6 +92,33 @@ protected:
 
   // Compute ambiguity covariance at current epoch
   bool estimateAmbiguityCovariance(const State& state, Eigen::MatrixXd& covariance);
+
+  // Create diagnostic loggers
+  void createDiagnosticLoggers();
+
+  // Log diagnostics after optimization
+  void logVisualResidualDiagnostics(const State& state, const FramePtr& frame);
+  void logImuResidualDiagnostics(const State& state);
+  void logMotionConstraintDiagnostics(const State& state);
+  void logGnssRejectionEvents(const double timestamp,
+    const std::set<uint64_t>& before, const std::set<uint64_t>& after,
+    const char* measurement_type, const char* removal_stage,
+    const char* removal_role);
+  void logRrrEpochDiagnostics(const double timestamp,
+    const std::set<uint64_t>& pseudorange_before,
+    const std::set<uint64_t>& pseudorange_after,
+    const std::set<uint64_t>& phaserange_before,
+    const std::set<uint64_t>& phaserange_after_pseudorange_stage,
+    const std::set<uint64_t>& phaserange_after_doppler_stage,
+    const std::set<uint64_t>& phaserange_after,
+    const std::set<uint64_t>& doppler_before,
+    const std::set<uint64_t>& doppler_after,
+    const size_t pseudorange_trigger_rejected,
+    const size_t phaserange_trigger_rejected,
+    const size_t doppler_trigger_rejected,
+    const bool ar_attempted,
+    const char* post_ar_solution_status, const char* post_ar_success,
+    const size_t rrr_unfix_ambiguity_reset_event);
   
   // Get latest state
   inline State& latestState() override { return states_[latest_state_index_]; }
@@ -116,6 +146,13 @@ protected:
   int num_continuous_unfix_ = 0;
   int num_cotinuous_reject_gnss_ = 0;
   int num_cotinuous_reject_visual_ = 0;
+
+  // Diagnostic loggers
+  std::ofstream visual_residual_diagnostics_logger_;
+  std::ofstream imu_residual_diagnostics_logger_;
+  std::ofstream motion_constraint_diagnostics_logger_;
+  std::ofstream gnss_rejection_events_logger_;
+  std::ofstream rrr_epoch_diagnostics_logger_;
 };
 
 }

@@ -16,6 +16,49 @@
 
 namespace gici {
 
+namespace {
+
+bool findDiagnosticObservation(
+  const GnssMeasurement& measurement, const GnssMeasurementIndex& index,
+  const char* role, const double state_time, const double measurement_rov_time,
+  const double measurement_ref_time, const Satellite** satellite,
+  const Observation** observation)
+{
+  const auto satellite_it = measurement.satellites.find(index.prn);
+  if (satellite_it == measurement.satellites.end()) {
+    LOG(WARNING) << "GNSS residual diagnostics observation unavailable: role="
+                 << role << ", state_time=" << state_time
+                 << ", measurement_rov_time=" << measurement_rov_time
+                 << ", measurement_ref_time=" << measurement_ref_time
+                 << ", requested=" << index.prn << " / " << index.code_type
+                 << ", available: satellite missing";
+    return false;
+  }
+
+  const Satellite& found_satellite = satellite_it->second;
+  const auto observation_it = found_satellite.observations.find(index.code_type);
+  if (observation_it == found_satellite.observations.end()) {
+    std::string available;
+    for (const auto& item : found_satellite.observations) {
+      available += " map_key=" + std::to_string(item.first) +
+        " raw_code=" + std::to_string(item.second.raw_code);
+    }
+    LOG(WARNING) << "GNSS residual diagnostics observation unavailable: role="
+                 << role << ", state_time=" << state_time
+                 << ", measurement_rov_time=" << measurement_rov_time
+                 << ", measurement_ref_time=" << measurement_ref_time
+                 << ", requested=" << index.prn << " / " << index.code_type
+                 << ", available:" << available;
+    return false;
+  }
+
+  *satellite = &found_satellite;
+  *observation = &observation_it->second;
+  return true;
+}
+
+}  // namespace
+
 // Create ambiguity logger
 void GnssEstimatorBase::createAmbiguityLogger(const std::string& directory)
 {
@@ -92,6 +135,29 @@ void GnssEstimatorBase::createDdPhaserangeResidualLogger(const std::string& dire
     (int)ep[0], (int)ep[1], (int)ep[2], (int)ep[3], (int)ep[4], (int)ep[5]);
   std::string path = directory + "/dd_phaserange_residual-" + buf + ".log";
   dd_phaserange_residual_logger_.open(path, std::ios::out | std::ios::trunc);
+}
+
+// Create GNSS residual diagnostics logger
+void GnssEstimatorBase::createGnssResidualDiagnosticsLogger(const std::string& directory)
+{
+  double time = vk::Timer::getCurrentTime();
+  double ep[6];
+  char buf[32];
+  time2epoch(gnss_common::doubleToGtime(time), ep);
+  sprintf(buf, "%04d%02d%02d-%02d%02d%02d",
+    (int)ep[0], (int)ep[1], (int)ep[2], (int)ep[3], (int)ep[4], (int)ep[5]);
+  std::string path = directory + "/gnss_residual_diagnostics-" + buf + ".csv";
+  gnss_residual_diagnostics_logger_.open(path, std::ios::out | std::ios::trunc);
+  if (!gnss_residual_diagnostics_logger_.is_open()) return;
+
+  gnss_residual_diagnostics_logger_
+    << "timestamp,measurement_type,residual_uid,rov_prn,base_prn,prn,code_type,"
+    << "normalized_residual,raw_residual,effective_sigma,"
+    << "rov_target_elevation_deg,rov_base_elevation_deg,elevation_deg,"
+    << "rov_target_snr,ref_target_snr,rov_base_snr,ref_base_snr,doppler_snr,"
+    << "rov_target_slip,ref_target_slip,rov_base_slip,ref_base_slip,doppler_slip,"
+    << "rov_target_lli,ref_target_lli,rov_base_lli,ref_base_lli,doppler_lli"
+    << std::endl;
 }
 
 // Log ambiguity estimate
@@ -383,6 +449,111 @@ void GnssEstimatorBase::logDdPhaserangeResidual()
   }
 }
 
+// Log GNSS residual diagnostics before outlier rejection
+void GnssEstimatorBase::logGnssResidualDiagnostics(
+  const State& state, const GnssMeasurement& measurement_rov,
+  const GnssMeasurement& measurement_ref)
+{
+  if (!gnss_residual_diagnostics_logger_.is_open()) return;
+
+  const auto& residual_blocks = graph_->residuals(state.id_in_graph.asInteger());
+  for (const auto& residual_block : residual_blocks) {
+    const auto& interface = residual_block.error_interface_ptr;
+    const ErrorType type = interface->typeInfo();
+    if (type != ErrorType::kPseudorangeErrorDD &&
+        type != ErrorType::kPhaserangeErrorDD &&
+        type != ErrorType::kDopplerError) continue;
+
+    double residual[1];
+    if (!graph_->problem()->EvaluateResidualBlock(
+          residual_block.residual_block_id, false, nullptr, residual, nullptr)) {
+      continue;
+    }
+    const double normalized_residual = residual[0];
+    interface->deNormalizeResidual(residual);
+    const double raw_residual = residual[0];
+    double sigma_probe[1] = {1.0};
+    interface->deNormalizeResidual(sigma_probe);
+    const double effective_sigma = std::fabs(sigma_probe[0]);
+
+    if (type == ErrorType::kPseudorangeErrorDD ||
+        type == ErrorType::kPhaserangeErrorDD) {
+      const GnssMeasurementDDIndexPair index =
+        getGnssMeasurementDDIndexPairFromErrorInterface(interface);
+      const Satellite *rov_target_satellite, *ref_target_satellite,
+        *rov_base_satellite, *ref_base_satellite;
+      const Observation *rov_target, *ref_target, *rov_base, *ref_base;
+      const bool has_rov_target = findDiagnosticObservation(
+        measurement_rov, index.rov, "rov_target", state.timestamp,
+        measurement_rov.timestamp, measurement_ref.timestamp,
+        &rov_target_satellite, &rov_target);
+      const bool has_ref_target = findDiagnosticObservation(
+        measurement_ref, index.ref, "ref_target", state.timestamp,
+        measurement_rov.timestamp, measurement_ref.timestamp,
+        &ref_target_satellite, &ref_target);
+      const bool has_rov_base = findDiagnosticObservation(
+        measurement_rov, index.rov_base, "rov_base", state.timestamp,
+        measurement_rov.timestamp, measurement_ref.timestamp,
+        &rov_base_satellite, &rov_base);
+      const bool has_ref_base = findDiagnosticObservation(
+        measurement_ref, index.ref_base, "ref_base", state.timestamp,
+        measurement_rov.timestamp, measurement_ref.timestamp,
+        &ref_base_satellite, &ref_base);
+      if (!has_rov_target || !has_ref_target || !has_rov_base || !has_ref_base) {
+        continue;
+      }
+      const double rov_target_elevation = gnss_common::satelliteElevation(
+        rov_target_satellite->sat_position, measurement_rov.position) * R2D;
+      const double rov_base_elevation = gnss_common::satelliteElevation(
+        rov_base_satellite->sat_position, measurement_rov.position) * R2D;
+
+      gnss_residual_diagnostics_logger_
+        << std::setprecision(15) << state.timestamp << ","
+        << (type == ErrorType::kPseudorangeErrorDD ? "dd_pseudorange" : "dd_phaserange")
+        << "," << reinterpret_cast<uint64_t>(residual_block.residual_block_id)
+        << "," << index.rov.prn << "," << index.rov_base.prn << ",,"
+        << index.rov.code_type << "," << normalized_residual << ","
+        << raw_residual << "," << effective_sigma << ","
+        << rov_target_elevation << "," << rov_base_elevation << ",,"
+        << rov_target->SNR << "," << ref_target->SNR << ","
+        << rov_base->SNR << "," << ref_base->SNR << ",,"
+        << static_cast<int>(rov_target->slip) << ","
+        << static_cast<int>(ref_target->slip) << ","
+        << static_cast<int>(rov_base->slip) << ","
+        << static_cast<int>(ref_base->slip) << ",,"
+        << static_cast<int>(rov_target->LLI) << ","
+        << static_cast<int>(ref_target->LLI) << ","
+        << static_cast<int>(rov_base->LLI) << ","
+        << static_cast<int>(ref_base->LLI) << ","
+        << '\n';
+    }
+    else {
+      const GnssMeasurementIndex index =
+        getGnssMeasurementIndexFromErrorInterface(interface);
+      const Satellite* satellite;
+      const Observation* observation;
+      if (!findDiagnosticObservation(
+            measurement_rov, index, "doppler", state.timestamp,
+            measurement_rov.timestamp, measurement_ref.timestamp,
+            &satellite, &observation)) {
+        continue;
+      }
+      const double elevation = gnss_common::satelliteElevation(
+        satellite->sat_position, measurement_rov.position) * R2D;
+
+      gnss_residual_diagnostics_logger_
+        << std::setprecision(15) << state.timestamp << ","
+        << "doppler," << reinterpret_cast<uint64_t>(residual_block.residual_block_id)
+        << ",,," << index.prn << "," << index.code_type << ","
+        << normalized_residual << "," << raw_residual << ","
+        << effective_sigma << ",,," << elevation << ",,,,,"
+        << observation->SNR << ",,,,,"
+        << static_cast<int>(observation->slip) << ",,,,,"
+        << static_cast<int>(observation->LLI) << '\n';
+    }
+  }
+}
+
 // Free ambiguity logger
 void GnssEstimatorBase::freeAmbiguityLogger()
 {
@@ -417,6 +588,12 @@ void GnssEstimatorBase::freePhaserangeResidualLogger()
 void GnssEstimatorBase::freeDdPhaserangeResidualLogger()
 {
   dd_phaserange_residual_logger_.close();
+}
+
+// Free GNSS residual diagnostics logger
+void GnssEstimatorBase::freeGnssResidualDiagnosticsLogger()
+{
+  gnss_residual_diagnostics_logger_.close();
 }
 
 }

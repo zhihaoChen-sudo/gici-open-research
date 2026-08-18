@@ -1,0 +1,226 @@
+[1mdiff --git a/include/gici/gnss/gnss_estimator_base.h b/include/gici/gnss/gnss_estimator_base.h[m
+[1mindex 1f26626..8cb405b 100755[m
+[1m--- a/include/gici/gnss/gnss_estimator_base.h[m
+[1m+++ b/include/gici/gnss/gnss_estimator_base.h[m
+[36m@@ -440,6 +440,9 @@[m [mprotected:[m
+   // Create DD phaserange residual logger[m
+   void createDdPhaserangeResidualLogger(const std::string& directory);[m
+ [m
+[32m+[m[32m  // Create GNSS residual diagnostics logger[m
+[32m+[m[32m  void createGnssResidualDiagnosticsLogger(const std::string& directory);[m
+[32m+[m
+   // Log ambiguity estimate[m
+   void logAmbiguityEstimate();[m
+ [m
+[36m@@ -458,6 +461,11 @@[m [mprotected:[m
+   // Log DD phasernage residual[m
+   void logDdPhaserangeResidual();[m
+ [m
+[32m+[m[32m  // Log GNSS residual diagnostics before outlier rejection[m
+[32m+[m[32m  void logGnssResidualDiagnostics([m
+[32m+[m[32m    const State& state, const GnssMeasurement& measurement_rov,[m
+[32m+[m[32m    const GnssMeasurement& measurement_ref);[m
+[32m+[m
+   // Free ambiguity logger[m
+   void freeAmbiguityLogger();[m
+ [m
+[36m@@ -476,6 +484,9 @@[m [mprotected:[m
+   // Free DD phaserange residual logger[m
+   void freeDdPhaserangeResidualLogger();[m
+ [m
+[32m+[m[32m  // Free GNSS residual diagnostics logger[m
+[32m+[m[32m  void freeGnssResidualDiagnosticsLogger();[m
+[32m+[m
+   // Compute and update GDOP[m
+   inline void updateGdop(const GnssMeasurement& measurement) {[m
+     gdop_ = gnss_common::computeDops(measurement, gnss_base_options_.common).x();[m
+[36m@@ -720,6 +731,7 @@[m [mprotected:[m
+   std::ofstream dd_pseudorange_residual_logger_;[m
+   std::ofstream phaserange_residual_logger_;[m
+   std::ofstream dd_phaserange_residual_logger_;[m
+[32m+[m[32m  std::ofstream gnss_residual_diagnostics_logger_;[m
+ };[m
+ [m
+[31m-}[m
+\ No newline at end of file[m
+[32m+[m[32m}[m
+[1mdiff --git a/src/fusion/rtk_imu_camera_rrr_estimator.cpp b/src/fusion/rtk_imu_camera_rrr_estimator.cpp[m
+[1mindex 188ab4b..1984399 100755[m
+[1m--- a/src/fusion/rtk_imu_camera_rrr_estimator.cpp[m
+[1m+++ b/src/fusion/rtk_imu_camera_rrr_estimator.cpp[m
+[36m@@ -57,11 +57,18 @@[m [mRtkImuCameraRrrEstimator::RtkImuCameraRrrEstimator([m
+   sub_gnss_base_options.use_outlier_rejection = false;[m
+   ambiguity_covariance_estimator_.reset(new RtkEstimator(sub_rtk_options, [m
+     sub_gnss_base_options, sub_base_options, ambiguity_options));[m
+[32m+[m
+[32m+[m[32m  if (base_options_.log_intermediate_data) {[m
+[32m+[m[32m    createGnssResidualDiagnosticsLogger([m
+[32m+[m[32m      base_options_.log_intermediate_data_directory);[m
+[32m+[m[32m  }[m
+ }[m
+ [m
+ // The default destructor[m
+ RtkImuCameraRrrEstimator::~RtkImuCameraRrrEstimator()[m
+[31m-{}[m
+[32m+[m[32m{[m
+[32m+[m[32m  freeGnssResidualDiagnosticsLogger();[m
+[32m+[m[32m}[m
+ [m
+ // Add measurement[m
+ bool RtkImuCameraRrrEstimator::addMeasurement(const EstimatorDataCluster& measurement)[m
+[36m@@ -347,6 +354,12 @@[m [mbool RtkImuCameraRrrEstimator::estimate()[m
+   double gdop = 0.0;[m
+   if (new_state_type == IdType::gPose)[m
+   {[m
+[32m+[m[32m    // Log optimized GNSS residuals before any outlier rejection removes them.[m
+[32m+[m[32m    if (base_options_.log_intermediate_data) {[m
+[32m+[m[32m      logGnssResidualDiagnostics([m
+[32m+[m[32m        states_[latest_state_index_], curGnssRov(), curGnssRef());[m
+[32m+[m[32m    }[m
+[32m+[m
+     // Reject GNSS outliers[m
+     size_t n_pseudorange = numPseudorangeError(states_[latest_state_index_]);[m
+     size_t n_phaserange = numPhaserangeError(states_[latest_state_index_]);[m
+[36m@@ -788,4 +801,4 @@[m [mbool RtkImuCameraRrrEstimator::estimateAmbiguityCovariance([m
+   return true;[m
+ }[m
+ [m
+[31m-};[m
+\ No newline at end of file[m
+[32m+[m[32m};[m
+[1mdiff --git a/src/gnss/gnss_estimator_base_logger.cpp b/src/gnss/gnss_estimator_base_logger.cpp[m
+[1mindex 448e4ed..ae23661 100755[m
+[1m--- a/src/gnss/gnss_estimator_base_logger.cpp[m
+[1m+++ b/src/gnss/gnss_estimator_base_logger.cpp[m
+[36m@@ -94,6 +94,29 @@[m [mvoid GnssEstimatorBase::createDdPhaserangeResidualLogger(const std::string& dire[m
+   dd_phaserange_residual_logger_.open(path, std::ios::out | std::ios::trunc);[m
+ }[m
+ [m
+[32m+[m[32m// Create GNSS residual diagnostics logger[m
+[32m+[m[32mvoid GnssEstimatorBase::createGnssResidualDiagnosticsLogger(const std::string& directory)[m
+[32m+[m[32m{[m
+[32m+[m[32m  double time = vk::Timer::getCurrentTime();[m
+[32m+[m[32m  double ep[6];[m
+[32m+[m[32m  char buf[32];[m
+[32m+[m[32m  time2epoch(gnss_common::doubleToGtime(time), ep);[m
+[32m+[m[32m  sprintf(buf, "%04d%02d%02d-%02d%02d%02d",[m
+[32m+[m[32m    (int)ep[0], (int)ep[1], (int)ep[2], (int)ep[3], (int)ep[4], (int)ep[5]);[m
+[32m+[m[32m  std::string path = directory + "/gnss_residual_diagnostics-" + buf + ".csv";[m
+[32m+[m[32m  gnss_residual_diagnostics_logger_.open(path, std::ios::out | std::ios::trunc);[m
+[32m+[m[32m  if (!gnss_residual_diagnostics_logger_.is_open()) return;[m
+[32m+[m
+[32m+[m[32m  gnss_residual_diagnostics_logger_[m
+[32m+[m[32m    << "timestamp,measurement_type,rov_prn,base_prn,prn,code_type,"[m
+[32m+[m[32m    << "normalized_residual,raw_residual,effective_sigma,"[m
+[32m+[m[32m    << "rov_target_elevation_deg,rov_base_elevation_deg,elevation_deg,"[m
+[32m+[m[32m    << "rov_target_snr,ref_target_snr,rov_base_snr,ref_base_snr,doppler_snr,"[m
+[32m+[m[32m    << "rov_target_slip,ref_target_slip,rov_base_slip,ref_base_slip,doppler_slip,"[m
+[32m+[m[32m    << "rov_target_lli,ref_target_lli,rov_base_lli,ref_base_lli,doppler_lli"[m
+[32m+[m[32m    << std::endl;[m
+[32m+[m[32m}[m
+[32m+[m
+ // Log ambiguity estimate[m
+ void GnssEstimatorBase::logAmbiguityEstimate()[m
+ {[m
+[36m@@ -383,6 +406,88 @@[m [mvoid GnssEstimatorBase::logDdPhaserangeResidual()[m
+   }[m
+ }[m
+ [m
+[32m+[m[32m// Log GNSS residual diagnostics before outlier rejection[m
+[32m+[m[32mvoid GnssEstimatorBase::logGnssResidualDiagnostics([m
+[32m+[m[32m  const State& state, const GnssMeasurement& measurement_rov,[m
+[32m+[m[32m  const GnssMeasurement& measurement_ref)[m
+[32m+[m[32m{[m
+[32m+[m[32m  if (!gnss_residual_diagnostics_logger_.is_open()) return;[m
+[32m+[m
+[32m+[m[32m  const auto& residual_blocks = graph_->residuals(state.id_in_graph.asInteger());[m
+[32m+[m[32m  for (const auto& residual_block : residual_blocks) {[m
+[32m+[m[32m    const auto& interface = residual_block.error_interface_ptr;[m
+[32m+[m[32m    const ErrorType type = interface->typeInfo();[m
+[32m+[m[32m    if (type != ErrorType::kPseudorangeErrorDD &&[m
+[32m+[m[32m        type != ErrorType::kPhaserangeErrorDD &&[m
+[32m+[m[32m        type != ErrorType::kDopplerError) continue;[m
+[32m+[m
+[32m+[m[32m    double residual[1];[m
+[32m+[m[32m    if (!graph_->problem()->EvaluateResidualBlock([m
+[32m+[m[32m          residual_block.residual_block_id, false, nullptr, residual, nullptr)) {[m
+[32m+[m[32m      continue;[m
+[32m+[m[32m    }[m
+[32m+[m[32m    const double normalized_residual = residual[0];[m
+[32m+[m[32m    interface->deNormalizeResidual(residual);[m
+[32m+[m[32m    const double raw_residual = residual[0];[m
+[32m+[m[32m    double sigma_probe[1] = {1.0};[m
+[32m+[m[32m    interface->deNormalizeResidual(sigma_probe);[m
+[32m+[m[32m    const double effective_sigma = std::fabs(sigma_probe[0]);[m
+[32m+[m
+[32m+[m[32m    gnss_residual_diagnostics_logger_ << std::setprecision(15)[m
+[32m+[m[32m      << state.timestamp << ",";[m
+[32m+[m
+[32m+[m[32m    if (type == ErrorType::kPseudorangeErrorDD ||[m
+[32m+[m[32m        type == ErrorType::kPhaserangeErrorDD) {[m
+[32m+[m[32m      const GnssMeasurementDDIndexPair index =[m
+[32m+[m[32m        getGnssMeasurementDDIndexPairFromErrorInterface(interface);[m
+[32m+[m[32m      const Satellite& rov_target_satellite = measurement_rov.getSat(index.rov);[m
+[32m+[m[32m      const Satellite& rov_base_satellite = measurement_rov.getSat(index.rov_base);[m
+[32m+[m[32m      const Observation& rov_target = measurement_rov.getObs(index.rov);[m
+[32m+[m[32m      const Observation& ref_target = measurement_ref.getObs(index.ref);[m
+[32m+[m[32m      const Observation& rov_base = measurement_rov.getObs(index.rov_base);[m
+[32m+[m[32m      const Observation& ref_base = measurement_ref.getObs(index.ref_base);[m
+[32m+[m[32m      const double rov_target_elevation = gnss_common::satelliteElevation([m
+[32m+[m[32m        rov_target_satellite.sat_position, measurement_rov.position) * R2D;[m
+[32m+[m[32m      const double rov_base_elevation = gnss_common::satelliteElevation([m
+[32m+[m[32m        rov_base_satellite.sat_position, measurement_rov.position) * R2D;[m
+[32m+[m
+[32m+[m[32m      gnss_residual_diagnostics_logger_[m
+[32m+[m[32m        << (type == ErrorType::kPseudorangeErrorDD ? "dd_pseudorange" : "dd_phaserange")[m
+[32m+[m[32m        << "," << index.rov.prn << "," << index.rov_base.prn << ",,"[m
+[32m+[m[32m        << index.rov.code_type << "," << normalized_residual << ","[m
+[32m+[m[32m        << raw_residual << "," << effective_sigma << ","[m
+[32m+[m[32m        << rov_target_elevation << "," << rov_base_elevation << ",,"[m
+[32m+[m[32m        << rov_target.SNR << "," << ref_target.SNR << ","[m
+[32m+[m[32m        << rov_base.SNR << "," << ref_base.SNR << ",,"[m
+[32m+[m[32m        << static_cast<int>(rov_target.slip) << ","[m
+[32m+[m[32m        << static_cast<int>(ref_target.slip) << ","[m
+[32m+[m[32m        << static_cast<int>(rov_base.slip) << ","[m
+[32m+[m[32m        << static_cast<int>(ref_base.slip) << ",,"[m
+[32m+[m[32m        << static_cast<int>(rov_target.LLI) << ","[m
+[32m+[m[32m        << static_cast<int>(ref_target.LLI) << ","[m
+[32m+[m[32m        << static_cast<int>(rov_base.LLI) << ","[m
+[32m+[m[32m        << static_cast<int>(ref_base.LLI) << ","[m
+[32m+[m[32m        << '\n';[m
+[32m+[m[32m    }[m
+[32m+[m[32m    else {[m
+[32m+[m[32m      const GnssMeasurementIndex index =[m
+[32m+[m[32m        getGnssMeasurementIndexFromErrorInterface(interface);[m
+[32m+[m[32m      const Satellite& satellite = measurement_rov.getSat(index);[m
+[32m+[m[32m      const Observation& observation = measurement_rov.getObs(index);[m
+[32m+[m[32m      const double elevation = gnss_common::satelliteElevation([m
+[32m+[m[32m        satellite.sat_position, measurement_rov.position) * R2D;[m
+[32m+[m
+[32m+[m[32m      gnss_residual_diagnostics_logger_[m
+[32m+[m[32m        << "doppler,,," << index.prn << "," << index.code_type << ","[m
+[32m+[m[32m        << normalized_residual << "," << raw_residual << ","[m
+[32m+[m[32m        << effective_sigma << ",,," << elevation << ",,,,,"[m
+[32m+[m[32m        << observation.SNR << ",,,,,"[m
+[32m+[m[32m        << static_cast<int>(observation.slip) << ",,,,,"[m
+[32m+[m[32m        << static_cast<int>(observation.LLI) << '\n';[m
+[32m+[m[32m    }[m
+[32m+[m[32m  }[m
+[32m+[m[32m}[m
+[32m+[m
+ // Free ambiguity logger[m
+ void GnssEstimatorBase::freeAmbiguityLogger()[m
+ {[m
+[36m@@ -419,4 +524,10 @@[m [mvoid GnssEstimatorBase::freeDdPhaserangeResidualLogger()[m
+   dd_phaserange_residual_logger_.close();[m
+ }[m
+ [m
+[31m-}[m
+\ No newline at end of file[m
+[32m+[m[32m// Free GNSS residual diagnostics logger[m
+[32m+[m[32mvoid GnssEstimatorBase::freeGnssResidualDiagnosticsLogger()[m
+[32m+[m[32m{[m
+[32m+[m[32m  gnss_residual_diagnostics_logger_.close();[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m}[m

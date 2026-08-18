@@ -440,6 +440,9 @@ protected:
   // Create DD phaserange residual logger
   void createDdPhaserangeResidualLogger(const std::string& directory);
 
+  // Create GNSS residual diagnostics logger
+  void createGnssResidualDiagnosticsLogger(const std::string& directory);
+
   // Log ambiguity estimate
   void logAmbiguityEstimate();
 
@@ -458,6 +461,11 @@ protected:
   // Log DD phasernage residual
   void logDdPhaserangeResidual();
 
+  // Log GNSS residual diagnostics before outlier rejection
+  void logGnssResidualDiagnostics(
+    const State& state, const GnssMeasurement& measurement_rov,
+    const GnssMeasurement& measurement_ref);
+
   // Free ambiguity logger
   void freeAmbiguityLogger();
 
@@ -475,6 +483,9 @@ protected:
 
   // Free DD phaserange residual logger
   void freeDdPhaserangeResidualLogger();
+
+  // Free GNSS residual diagnostics logger
+  void freeGnssResidualDiagnosticsLogger();
 
   // Compute and update GDOP
   inline void updateGdop(const GnssMeasurement& measurement) {
@@ -720,6 +731,7 @@ protected:
   std::ofstream dd_pseudorange_residual_logger_;
   std::ofstream phaserange_residual_logger_;
   std::ofstream dd_phaserange_residual_logger_;
+  std::ofstream gnss_residual_diagnostics_logger_;
 };
 
 }
