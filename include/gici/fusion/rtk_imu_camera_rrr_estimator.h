@@ -118,7 +118,10 @@ protected:
     const size_t doppler_trigger_rejected,
     const bool ar_attempted,
     const char* post_ar_solution_status, const char* post_ar_success,
-    const size_t rrr_unfix_ambiguity_reset_event);
+    const size_t rrr_unfix_ambiguity_reset_event,
+    const GnssPreoptResidualSummary& preopt_summary,
+    const double first_optimize_ms, const double gnss_rejection_ms,
+    const double ar_ms, const double epoch_compute_ms);
   
   // Get latest state
   inline State& latestState() override { return states_[latest_state_index_]; }

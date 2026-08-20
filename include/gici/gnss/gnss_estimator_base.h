@@ -442,6 +442,20 @@ protected:
 
   // Create GNSS residual diagnostics logger
   void createGnssResidualDiagnosticsLogger(const std::string& directory);
+  void logGnssPreoptResidualDiagnostics(
+    const State& state, const GnssMeasurement& measurement_rov,
+    const GnssMeasurement& measurement_ref);
+  struct GnssPreoptResidualSummary {
+    double pseudorange_max_abs_normalized;
+    size_t pseudorange_count_gt3 = 0, pseudorange_count_gt5 = 0;
+    double phaserange_max_abs_normalized;
+    size_t phaserange_count_gt3 = 0, phaserange_count_gt5 = 0;
+    double doppler_max_abs_normalized;
+    size_t doppler_count_gt3 = 0, doppler_count_gt5 = 0;
+  };
+  const GnssPreoptResidualSummary& gnssPreoptResidualSummary() const {
+    return gnss_preopt_residual_summary_;
+  }
 
   // Log ambiguity estimate
   void logAmbiguityEstimate();
@@ -464,7 +478,7 @@ protected:
   // Log GNSS residual diagnostics before outlier rejection
   void logGnssResidualDiagnostics(
     const State& state, const GnssMeasurement& measurement_rov,
-    const GnssMeasurement& measurement_ref);
+    const GnssMeasurement& measurement_ref, const bool preopt = false);
 
   // Free ambiguity logger
   void freeAmbiguityLogger();
@@ -732,6 +746,8 @@ protected:
   std::ofstream phaserange_residual_logger_;
   std::ofstream dd_phaserange_residual_logger_;
   std::ofstream gnss_residual_diagnostics_logger_;
+  std::ofstream gnss_preopt_residual_diagnostics_logger_;
+  GnssPreoptResidualSummary gnss_preopt_residual_summary_;
 };
 
 }

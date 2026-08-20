@@ -9,6 +9,7 @@
 #include "gici/fusion/rtk_imu_camera_rrr_estimator.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <iomanip>
 #include <vector>
@@ -42,6 +43,11 @@ void createDiagnosticLogger(
   }
   logger << std::setprecision(15);
   logger << header << '\n';
+}
+
+double durationMilliseconds(const std::chrono::steady_clock::duration& duration)
+{
+  return std::chrono::duration<double, std::milli>(duration).count();
 }
 
 std::set<uint64_t> collectGnssResidualIds(
@@ -169,7 +175,11 @@ void RtkImuCameraRrrEstimator::createDiagnosticLoggers()
     "n_phaserange_removed_by_phaserange_stage,n_phaserange_trigger_rejected,"
     "n_doppler_before,n_doppler_after,n_doppler_removed,"
     "n_doppler_trigger_rejected,rejected_any,ar_attempted,"
-    "post_ar_solution_status,post_ar_success,rrr_unfix_ambiguity_reset_event");
+    "post_ar_solution_status,post_ar_success,rrr_unfix_ambiguity_reset_event,"
+    "preopt_pseudorange_max_abs_normalized,preopt_pseudorange_count_gt3,preopt_pseudorange_count_gt5,"
+    "preopt_phaserange_max_abs_normalized,preopt_phaserange_count_gt3,preopt_phaserange_count_gt5,"
+    "preopt_doppler_max_abs_normalized,preopt_doppler_count_gt3,preopt_doppler_count_gt5,"
+    "first_optimize_ms,gnss_rejection_ms,ar_ms,epoch_compute_ms");
 }
 
 void RtkImuCameraRrrEstimator::logGnssRejectionEvents(const double timestamp,
@@ -199,7 +209,10 @@ void RtkImuCameraRrrEstimator::logRrrEpochDiagnostics(const double timestamp,
   const size_t doppler_trigger_rejected,
   const bool ar_attempted,
   const char* post_ar_solution_status, const char* post_ar_success,
-  const size_t rrr_unfix_ambiguity_reset_event)
+  const size_t rrr_unfix_ambiguity_reset_event,
+  const GnssPreoptResidualSummary& preopt_summary,
+  const double first_optimize_ms, const double gnss_rejection_ms,
+  const double ar_ms, const double epoch_compute_ms)
 {
   if (!rrr_epoch_diagnostics_logger_.is_open()) return;
   const size_t pseudorange_removed =
@@ -225,7 +238,11 @@ void RtkImuCameraRrrEstimator::logRrrEpochDiagnostics(const double timestamp,
     << doppler_after.size() << ',' << doppler_removed << ','
     << doppler_trigger_rejected << ',' << rejected_any << ',' << ar_attempted
     << ',' << post_ar_solution_status << ',' << post_ar_success << ','
-    << rrr_unfix_ambiguity_reset_event << '\n';
+    << rrr_unfix_ambiguity_reset_event << ','
+    << preopt_summary.pseudorange_max_abs_normalized << ',' << preopt_summary.pseudorange_count_gt3 << ',' << preopt_summary.pseudorange_count_gt5 << ','
+    << preopt_summary.phaserange_max_abs_normalized << ',' << preopt_summary.phaserange_count_gt3 << ',' << preopt_summary.phaserange_count_gt5 << ','
+    << preopt_summary.doppler_max_abs_normalized << ',' << preopt_summary.doppler_count_gt3 << ',' << preopt_summary.doppler_count_gt5 << ','
+    << first_optimize_ms << ',' << gnss_rejection_ms << ',' << ar_ms << ',' << epoch_compute_ms << '\n';
 }
 
 void RtkImuCameraRrrEstimator::logVisualResidualDiagnostics(
@@ -727,12 +744,30 @@ bool RtkImuCameraRrrEstimator::estimate()
 {
   status_ = EstimatorStatus::Converged;
 
+  if (base_options_.log_intermediate_data &&
+      states_[latest_state_index_].id.type() == IdType::gPose) {
+    logGnssPreoptResidualDiagnostics(
+      states_[latest_state_index_], curGnssRov(), curGnssRef());
+  }
+
+  // Core RRR computation from first optimize start through AR completion,
+  // excluding explicitly instrumented diagnostic-only bookkeeping.
+  // This is NOT sensor-to-solution end-to-end latency.
+  const auto first_optimize_start = std::chrono::steady_clock::now();
+  const auto epoch_compute_start = first_optimize_start;
+
   // Optimize
   optimize();
+  const auto first_optimize_end = std::chrono::steady_clock::now();
+  const double first_optimize_ms = durationMilliseconds(
+    first_optimize_end - first_optimize_start);
+  auto diagnostic_overhead_time = std::chrono::steady_clock::duration::zero();
 
   if (base_options_.log_intermediate_data) {
+    const auto diagnostic_start = std::chrono::steady_clock::now();
     logImuResidualDiagnostics(states_[latest_state_index_]);
     logMotionConstraintDiagnostics(states_[latest_state_index_]);
+    diagnostic_overhead_time += std::chrono::steady_clock::now() - diagnostic_start;
   }
 
   // Get current sensor type
@@ -744,20 +779,24 @@ bool RtkImuCameraRrrEstimator::estimate()
   {
     // Log optimized GNSS residuals before any outlier rejection removes them.
     if (base_options_.log_intermediate_data) {
+      const auto diagnostic_start = std::chrono::steady_clock::now();
       logGnssResidualDiagnostics(
         states_[latest_state_index_], curGnssRov(), curGnssRef());
+      diagnostic_overhead_time += std::chrono::steady_clock::now() - diagnostic_start;
     }
 
     std::set<uint64_t> pseudorange_before;
     std::set<uint64_t> phaserange_before;
     std::set<uint64_t> doppler_before;
     if (base_options_.log_intermediate_data) {
+      const auto diagnostic_start = std::chrono::steady_clock::now();
       pseudorange_before = collectGnssResidualIds(
         graph_, states_[latest_state_index_], ErrorType::kPseudorangeErrorDD);
       phaserange_before = collectGnssResidualIds(
         graph_, states_[latest_state_index_], ErrorType::kPhaserangeErrorDD);
       doppler_before = collectGnssResidualIds(
         graph_, states_[latest_state_index_], ErrorType::kDopplerError);
+      diagnostic_overhead_time += std::chrono::steady_clock::now() - diagnostic_start;
     }
 
     // Reject GNSS outliers
@@ -773,10 +812,13 @@ bool RtkImuCameraRrrEstimator::estimate()
     std::set<uint64_t> pseudorange_after_doppler_stage;
     std::set<uint64_t> phaserange_after_doppler_stage;
     std::set<uint64_t> doppler_after_doppler_stage;
+    const auto gnss_rejection_start = std::chrono::steady_clock::now();
+    const auto diagnostic_overhead_time_before_rejection = diagnostic_overhead_time;
     if (gnss_base_options_.use_outlier_rejection) {
       n_pseudorange_trigger_rejected = rejectPseudorangeOutlier(
         states_[latest_state_index_], curAmbiguityState());
       if (base_options_.log_intermediate_data) {
+        const auto diagnostic_start = std::chrono::steady_clock::now();
         pseudorange_after_pseudorange_stage = collectGnssResidualIds(
           graph_, states_[latest_state_index_], ErrorType::kPseudorangeErrorDD);
         phaserange_after_pseudorange_stage = collectGnssResidualIds(
@@ -789,10 +831,12 @@ bool RtkImuCameraRrrEstimator::estimate()
         logGnssRejectionEvents(states_[latest_state_index_].timestamp,
           phaserange_before, phaserange_after_pseudorange_stage,
           "dd_phaserange", "pseudorange", "ambiguity_cascade_removal");
+        diagnostic_overhead_time += std::chrono::steady_clock::now() - diagnostic_start;
       }
       n_doppler_trigger_rejected = rejectDopplerOutlier(
         states_[latest_state_index_]);
       if (base_options_.log_intermediate_data) {
+        const auto diagnostic_start = std::chrono::steady_clock::now();
         pseudorange_after_doppler_stage = collectGnssResidualIds(
           graph_, states_[latest_state_index_], ErrorType::kPseudorangeErrorDD);
         phaserange_after_doppler_stage = collectGnssResidualIds(
@@ -806,14 +850,19 @@ bool RtkImuCameraRrrEstimator::estimate()
             phaserange_after_pseudorange_stage != phaserange_after_doppler_stage) {
           LOG(WARNING) << "Unexpected GNSS cross-type removal during Doppler rejection";
         }
+        diagnostic_overhead_time += std::chrono::steady_clock::now() - diagnostic_start;
       }
       n_phaserange_trigger_rejected = rejectPhaserangeOutlier(
         states_[latest_state_index_], curAmbiguityState());
       if (base_options_.log_intermediate_data) {
+        const auto diagnostic_start = std::chrono::steady_clock::now();
+        const std::set<uint64_t> phaserange_after_phaserange_stage =
+          collectGnssResidualIds(
+            graph_, states_[latest_state_index_], ErrorType::kPhaserangeErrorDD);
         logGnssRejectionEvents(states_[latest_state_index_].timestamp,
-          phaserange_after_doppler_stage, collectGnssResidualIds(
-            graph_, states_[latest_state_index_], ErrorType::kPhaserangeErrorDD),
+          phaserange_after_doppler_stage, phaserange_after_phaserange_stage,
           "dd_phaserange", "phaserange", "phaserange_stage_removal");
+        diagnostic_overhead_time += std::chrono::steady_clock::now() - diagnostic_start;
       }
     }
 
@@ -821,6 +870,7 @@ bool RtkImuCameraRrrEstimator::estimate()
     std::set<uint64_t> phaserange_after;
     std::set<uint64_t> doppler_after;
     if (base_options_.log_intermediate_data) {
+      const auto diagnostic_start = std::chrono::steady_clock::now();
       pseudorange_after = collectGnssResidualIds(
         graph_, states_[latest_state_index_], ErrorType::kPseudorangeErrorDD);
       phaserange_after = collectGnssResidualIds(
@@ -835,7 +885,12 @@ bool RtkImuCameraRrrEstimator::estimate()
         phaserange_after_doppler_stage = phaserange_before;
         doppler_after_doppler_stage = doppler_before;
       }
+      diagnostic_overhead_time += std::chrono::steady_clock::now() - diagnostic_start;
     }
+    const auto gnss_rejection_end = std::chrono::steady_clock::now();
+    const double gnss_rejection_ms = durationMilliseconds(
+      (gnss_rejection_end - gnss_rejection_start) -
+      (diagnostic_overhead_time - diagnostic_overhead_time_before_rejection));
 
     // Check if we rejected too many GNSS residuals
     double ratio_pseudorange = n_pseudorange == 0.0 ? 0.0 : 1.0 - 
@@ -857,6 +912,7 @@ bool RtkImuCameraRrrEstimator::estimate()
       num_cotinuous_reject_gnss_ = 0;
     }
 
+    const auto ar_start = std::chrono::steady_clock::now();
     // Ambiguity resolution
     for (size_t i = latest_state_index_; i < states_.size(); i++) {
       states_[i].status = GnssSolutionStatus::Float;
@@ -902,6 +958,10 @@ bool RtkImuCameraRrrEstimator::estimate()
         num_continuous_unfix_ = 0;
       }
     }
+    const auto ar_end = std::chrono::steady_clock::now();
+    const double ar_ms = durationMilliseconds(ar_end - ar_start);
+    const double epoch_compute_ms = durationMilliseconds(
+      (ar_end - epoch_compute_start) - diagnostic_overhead_time);
     if (base_options_.log_intermediate_data) {
       logRrrEpochDiagnostics(states_[latest_state_index_].timestamp,
         pseudorange_before, pseudorange_after, phaserange_before,
@@ -910,7 +970,8 @@ bool RtkImuCameraRrrEstimator::estimate()
         doppler_after, n_pseudorange_trigger_rejected,
         n_phaserange_trigger_rejected, n_doppler_trigger_rejected, ar_attempted,
         gnssSolutionStatusString(states_[latest_state_index_].status),
-        post_ar_success, ambiguity_reset_count);
+        post_ar_success, ambiguity_reset_count, gnssPreoptResidualSummary(),
+        first_optimize_ms, gnss_rejection_ms, ar_ms, epoch_compute_ms);
     }
   }
 
