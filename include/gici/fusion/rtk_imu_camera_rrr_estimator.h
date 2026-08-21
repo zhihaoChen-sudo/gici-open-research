@@ -37,6 +37,9 @@ struct RtkImuCameraRrrEstimatorOptions {
 
   // Use CauchyLoss(1) only for DD pseudorange factors in this estimator
   bool use_cauchy_loss_for_dd_pseudorange = false;
+
+  // Estimate DD pseudorange reliability without changing factor weights
+  bool estimate_reliability_for_dd_pseudorange = false;
 };
 
 // Estimator
@@ -99,7 +102,8 @@ protected:
   // Create diagnostic loggers
   void createDiagnosticLoggers();
 
-  // Log diagnostics after optimization
+  // Log diagnostics
+  void logDdPseudorangeReliabilityDiagnostics(const State& state);
   void logVisualResidualDiagnostics(const State& state, const FramePtr& frame);
   void logImuResidualDiagnostics(const State& state);
   void logMotionConstraintDiagnostics(const State& state);
@@ -159,6 +163,7 @@ protected:
   std::ofstream motion_constraint_diagnostics_logger_;
   std::ofstream gnss_rejection_events_logger_;
   std::ofstream rrr_epoch_diagnostics_logger_;
+  std::ofstream dd_pseudorange_reliability_diagnostics_logger_;
 };
 
 }

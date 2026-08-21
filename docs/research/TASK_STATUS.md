@@ -1,22 +1,23 @@
 # Current Task Status
 
-Last reconciled: 2026-08-21
+Last reconciled: 2026-08-22
 
 ## Current objective
 
 Develop multi-source reliability-aware fusion without further robust-loss
-replacement. The active implementation is Phase 1 only: add optional Graph
-ownership for factor-specific loss functions. No estimator currently uses the
-new owned-loss API, and DD pseudorange reliability weighting is reserved for
-Phase 2.
+replacement. Phase 1 Graph-owned loss infrastructure has been validated and
+accepted. The active worktree implements Stage 2A only: RRR-specific shadow
+estimation and diagnostics for DD pseudorange reliability. It does not apply
+the estimated weight to optimization; `ScaledLoss` integration remains
+reserved for Stage 2B.
 
 ---
 
 ## Repository state
 
 - Branch: `exp/pseudorange-firstsolve-huber`
-- HEAD before the current worktree change: `f458046`
-  (`research: add configurable DD pseudorange Cauchy loss experiment`)
+- HEAD before the current worktree change: `1c7c6fb`
+  (`infra: add owned loss lifecycle support for reliability weighting`)
 - Validated diagnostics baseline tag: `rrr-diagnostics-baseline-v1` at
   `f5c2125`
 - Separate historical experiment branch: `exp/reopt-after-gnss-rejection` at
@@ -28,8 +29,8 @@ or ambiguity change is implemented.
 
 ## Phase 1 final summary: Graph-owned loss infrastructure
 
-**Status:** implemented and statically inspected; `git diff --check` passed.
-It has not been compiled or runtime tested.
+**Status:** validation completed and the infrastructure was accepted, as
+confirmed by the user before Stage 2A began.
 
 Modified production files:
 
@@ -46,23 +47,43 @@ direct residual removal therefore converge on the same safe release path. The
 explicit `Graph` destructor destroys the Ceres Problem before member maps and
 their owned losses are destroyed.
 
-Baseline mathematics is unchanged: every existing factor still calls the
-original `addResidualBlock()` API, all existing loss pointers remain borrowed,
-and no caller uses the new owned-loss API. Residual models, factor ordering,
-solver settings, rejection, ambiguity resolution, marginalization logic, and
-diagnostics are unchanged. No Phase 2 reliability option, indicator, weight,
-or DD pseudorange cost scaling is implemented.
+Baseline mathematics is unchanged: existing factor paths continue to use the
+original `addResidualBlock()` API with borrowed loss pointers. Stage 2A also
+does not call the owned-loss API.
 
-Remaining validation before relying on the infrastructure:
+## Stage 2A current worktree: reliability estimation only
 
-1. compile the repository in the known-working environment;
-2. run a focused owned/borrowed loss lifetime test covering direct residual
-   removal, parameter-removal cascade, reset, marginalization, and Graph
-   destruction, preferably with AddressSanitizer;
-3. run the existing option-false baseline and confirm unchanged factor counts,
-   loss diagnostics, solver costs, rejection/AR sequence, and trajectory; and
-4. verify the new owned-loss API still has no production caller before Phase 2
-   begins.
+A new RRR-only option, `estimate_reliability_for_dd_pseudorange`, defaults to
+`false` and is mutually exclusive with the historical DD pseudorange Cauchy
+option. When enabled, DD pseudorange candidates are directly evaluated at the
+current pre-opt pose and extrinsics, grouped by constellation, base satellite,
+and four code types, and assigned diagnostics-only peer-consistency metadata.
+The estimated weight is logged but `applied_weight` is fixed to 1.0.
+
+Every Stage 2A DD pseudorange factor is still inserted with the existing shared
+`HuberLoss(1)` raw pointer. No `ScaledLoss` is constructed, and no owned-loss
+API is called. `PseudorangeErrorDD::Evaluate`, Jacobians, information, carrier
+phase, Doppler, vision, IMU, motion constraints, rejection, ambiguity
+resolution, solver, and marginalization are unchanged.
+
+With the option enabled, a separate
+`dd_pseudorange_reliability_diagnostics-<timestamp>.csv` records the direct
+residual, the immediate post-insertion `EvaluateResidualBlock(false)` value,
+the normal pre-opt Graph value, their differences, peer statistics, estimated
+weight, and applied weight. The separate file is not created when the option
+is false, leaving existing diagnostic CSV schemas unchanged.
+
+Stage 2A has not yet been compiled or runtime validated. Required validation:
+
+1. compare option=false output files byte-for-byte against the Phase 1
+   baseline under the same build and replay conditions;
+2. verify every successful direct/post-insertion pair agrees within a declared
+   floating-point tolerance and that `direct_minus_preopt_graph` is likewise
+   negligible;
+3. verify every row has `applied_weight=1`, all DD pseudorange losses remain
+   Huber(1), and the new owned-loss API has no caller; and
+4. confirm carrier phase, Doppler, vision, IMU, motion, rejection, AR, solver,
+   and marginalization behavior is unchanged before Stage 2B begins.
 
 ---
 

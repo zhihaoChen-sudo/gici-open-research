@@ -8,6 +8,8 @@
 **/
 #pragma once
 
+#include <limits>
+
 #pragma diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 // Eigen 3.2.7 uses std::binder1st and std::binder2nd which are deprecated since c++11
@@ -21,6 +23,24 @@
 #include "gici/gnss/gnss_types.h"
 
 namespace gici {
+
+// Read-only diagnostics metadata for the DD pseudorange reliability estimate.
+// These values do not participate in residual or Jacobian evaluation.
+struct DdPseudorangeReliabilityMetadata {
+  bool enabled = false;
+  bool direct_evaluate_success = false;
+  bool post_insertion_evaluate_success = false;
+  size_t peer_count = 0;
+  double direct_preopt_normalized_residual =
+    std::numeric_limits<double>::quiet_NaN();
+  double post_insertion_normalized_residual =
+    std::numeric_limits<double>::quiet_NaN();
+  double peer_median = std::numeric_limits<double>::quiet_NaN();
+  double peer_scale = std::numeric_limits<double>::quiet_NaN();
+  double reliability_indicator = std::numeric_limits<double>::quiet_NaN();
+  double estimated_weight = 1.0;
+  double applied_weight = 1.0;
+};
 
 // Double-differenced pseudorange error
 // The candidate parameter setups are:
@@ -90,6 +110,15 @@ public:
   // Set coordinate for ENU to ECEF convertion
   void setCoordinate(const GeoCoordinatePtr& coordinate) {
     coordinate_ = coordinate;
+  }
+
+  // Set/get diagnostics-only reliability metadata.
+  void setReliabilityMetadata(
+      const DdPseudorangeReliabilityMetadata& metadata) {
+    reliability_metadata_ = metadata;
+  }
+  const DdPseudorangeReliabilityMetadata& reliabilityMetadata() const {
+    return reliability_metadata_;
   }
 
   // error term and Jacobian implementation
@@ -165,6 +194,9 @@ protected:
   information_t square_root_information_inverse_;
   covariance_t covariance_; ///< The DimxDim covariance matrix.
 
+  // Diagnostics-only reliability estimate. Not used by Evaluate().
+  DdPseudorangeReliabilityMetadata reliability_metadata_;
+
   // Parameter dimensions
   ceres::internal::StaticParameterDims<Ns...> dims_;
 
@@ -184,4 +216,3 @@ template class PseudorangeErrorDD<3, 1, 1, 1, 1>;  // Group 3
 template class PseudorangeErrorDD<7, 3, 1, 1, 1, 1>;  // Group 4
 
 }  
-

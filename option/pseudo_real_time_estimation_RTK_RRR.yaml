@@ -173,6 +173,7 @@ estimate:
       max_keyframes: 3
       min_yaw_std_init_visual: 0.5
       use_cauchy_loss_for_dd_pseudorange: false
+      estimate_reliability_for_dd_pseudorange: false
     rtk_options:
       use_ambiguity_resolution: true
     gnss_estimator_base_options:

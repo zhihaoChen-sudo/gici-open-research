@@ -12,9 +12,11 @@
 #include <chrono>
 #include <cmath>
 #include <iomanip>
+#include <limits>
 #include <vector>
 
 #include "gici/gnss/position_error.h"
+#include "gici/gnss/pseudorange_error_dd.h"
 #include "gici/imu/hmc_error.h"
 #include "gici/imu/imu_error.h"
 #include "gici/imu/nhc_error.h"
@@ -97,6 +99,9 @@ RtkImuCameraRrrEstimator::RtkImuCameraRrrEstimator(
   EstimatorBase(base_options)
 {
   type_ = EstimatorType::RtkImuCameraRrr;
+  CHECK(!(rrr_options_.use_cauchy_loss_for_dd_pseudorange &&
+          rrr_options_.estimate_reliability_for_dd_pseudorange))
+    << "DD pseudorange Cauchy loss and reliability estimation are mutually exclusive";
   is_use_phase_ = true;
   states_.push_back(State());
   gnss_measurement_pairs_.push_back(
@@ -141,6 +146,7 @@ RtkImuCameraRrrEstimator::~RtkImuCameraRrrEstimator()
   motion_constraint_diagnostics_logger_.close();
   gnss_rejection_events_logger_.close();
   rrr_epoch_diagnostics_logger_.close();
+  dd_pseudorange_reliability_diagnostics_logger_.close();
 }
 
 void RtkImuCameraRrrEstimator::createDiagnosticLoggers()
@@ -180,6 +186,64 @@ void RtkImuCameraRrrEstimator::createDiagnosticLoggers()
     "preopt_phaserange_max_abs_normalized,preopt_phaserange_count_gt3,preopt_phaserange_count_gt5,"
     "preopt_doppler_max_abs_normalized,preopt_doppler_count_gt3,preopt_doppler_count_gt5,"
     "first_optimize_ms,gnss_rejection_ms,ar_ms,epoch_compute_ms");
+  if (rrr_options_.estimate_reliability_for_dd_pseudorange) {
+    createDiagnosticLogger(
+      dd_pseudorange_reliability_diagnostics_logger_, directory,
+      "dd_pseudorange_reliability_diagnostics",
+      "timestamp,residual_uid,rov_prn,base_prn,rov_code_type,ref_code_type,"
+      "rov_base_code_type,ref_base_code_type,direct_evaluate_success,"
+      "post_insertion_evaluate_success,preopt_graph_evaluate_success,"
+      "direct_preopt_normalized_residual,post_insertion_normalized_residual,"
+      "preopt_graph_normalized_residual,direct_minus_post_insertion,"
+      "direct_minus_preopt_graph,peer_count,peer_median,peer_scale,"
+      "reliability_indicator,estimated_weight,applied_weight");
+  }
+}
+
+void RtkImuCameraRrrEstimator::logDdPseudorangeReliabilityDiagnostics(
+  const State& state)
+{
+  if (!dd_pseudorange_reliability_diagnostics_logger_.is_open()) return;
+
+  for (const auto& residual_block :
+       graph_->residuals(state.id_in_graph.asInteger())) {
+    const auto error = std::dynamic_pointer_cast<PseudorangeErrorDD<7, 3>>(
+      residual_block.error_interface_ptr);
+    if (!error) continue;
+
+    const auto& metadata = error->reliabilityMetadata();
+    if (!metadata.enabled) continue;
+
+    double preopt_graph_residual = std::numeric_limits<double>::quiet_NaN();
+    const bool preopt_graph_evaluate_success =
+      graph_->problem()->EvaluateResidualBlock(
+        residual_block.residual_block_id, false, nullptr,
+        &preopt_graph_residual, nullptr);
+    const double direct_minus_post_insertion =
+      metadata.direct_preopt_normalized_residual -
+      metadata.post_insertion_normalized_residual;
+    const double direct_minus_preopt_graph =
+      metadata.direct_preopt_normalized_residual - preopt_graph_residual;
+    const GnssMeasurementDDIndexPair index =
+      error->getGnssMeasurementIndex();
+
+    dd_pseudorange_reliability_diagnostics_logger_
+      << std::setprecision(15) << state.timestamp << ","
+      << reinterpret_cast<uint64_t>(residual_block.residual_block_id) << ","
+      << index.rov.prn << "," << index.rov_base.prn << ","
+      << index.rov.code_type << "," << index.ref.code_type << ","
+      << index.rov_base.code_type << "," << index.ref_base.code_type << ","
+      << metadata.direct_evaluate_success << ","
+      << metadata.post_insertion_evaluate_success << ","
+      << preopt_graph_evaluate_success << ","
+      << metadata.direct_preopt_normalized_residual << ","
+      << metadata.post_insertion_normalized_residual << ","
+      << preopt_graph_residual << "," << direct_minus_post_insertion << ","
+      << direct_minus_preopt_graph << "," << metadata.peer_count << ","
+      << metadata.peer_median << "," << metadata.peer_scale << ","
+      << metadata.reliability_indicator << ","
+      << metadata.estimated_weight << "," << metadata.applied_weight << '\n';
+  }
 }
 
 void RtkImuCameraRrrEstimator::logGnssRejectionEvents(const double timestamp,
@@ -573,7 +637,8 @@ bool RtkImuCameraRrrEstimator::addGnssMeasurementAndState(
   int num_valid_satellite = 0;
   addDdPseudorangeResidualBlocks(curGnssRov(), 
     curGnssRef(), code_index_pairs, states_[index], num_valid_satellite, false,
-    rrr_options_.use_cauchy_loss_for_dd_pseudorange);
+    rrr_options_.use_cauchy_loss_for_dd_pseudorange,
+    rrr_options_.estimate_reliability_for_dd_pseudorange);
   
   // We do not need to check if the number of satellites is sufficient in tightly fusion.
   if (!checkSufficientSatellite(num_valid_satellite, 0)) {
@@ -749,6 +814,9 @@ bool RtkImuCameraRrrEstimator::estimate()
       states_[latest_state_index_].id.type() == IdType::gPose) {
     logGnssPreoptResidualDiagnostics(
       states_[latest_state_index_], curGnssRov(), curGnssRef());
+    if (rrr_options_.estimate_reliability_for_dd_pseudorange) {
+      logDdPseudorangeReliabilityDiagnostics(states_[latest_state_index_]);
+    }
   }
 
   // Core RRR computation from first optimize start through AR completion,

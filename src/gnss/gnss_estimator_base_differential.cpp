@@ -8,6 +8,11 @@
 **/
 #include "gici/gnss/gnss_estimator_base.h"
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <tuple>
+
 #include "gici/gnss/gnss_parameter_blocks.h"
 #include "gici/gnss/gnss_const_errors.h"
 #include "gici/gnss/pseudorange_error_sd.h"
@@ -274,11 +279,158 @@ void GnssEstimatorBase::addDdPseudorangeResidualBlocks(
   const State& state,
   int& num_valid_satellite,
   bool use_single_frequency,
-  bool use_cauchy_loss_for_dd_pseudorange)
+  bool use_cauchy_loss_for_dd_pseudorange,
+  bool estimate_reliability_for_dd_pseudorange)
 {
   CHECK(!(use_single_frequency && is_verbose_model_));
+  CHECK(!(use_cauchy_loss_for_dd_pseudorange &&
+          estimate_reliability_for_dd_pseudorange))
+    << "DD pseudorange Cauchy loss and reliability estimation are mutually exclusive";
   num_valid_satellite = 0;
   const BackendId parameter_id = state.id;
+
+  // Stage 2A shadow mode: estimate and record reliability, but keep the
+  // original Huber(1) loss pointer and optimization cost unchanged.
+  if (estimate_reliability_for_dd_pseudorange) {
+    CHECK(!is_verbose_model_);
+    CHECK(parameter_id.type() != IdType::gPosition)
+      << "DD pseudorange reliability estimation is only enabled for fusion poses";
+
+    using ReliabilityGroupKey =
+      std::tuple<char, std::string, int, int, int, int>;
+    struct Candidate {
+      std::shared_ptr<PseudorangeErrorDD<7, 3>> error;
+      ReliabilityGroupKey group_key;
+      DdPseudorangeReliabilityMetadata metadata;
+    };
+
+    std::vector<Candidate> candidates;
+    std::map<ReliabilityGroupKey, std::vector<size_t>> group_to_candidates;
+    std::unordered_map<std::string, int> num_code_used;
+    std::unordered_map<char, int> num_system_used;
+    const BackendId pose_id = state.id_in_graph;
+    const auto pose_parameter = graph_->parameterBlockPtr(pose_id.asInteger());
+    const auto extrinsics_parameter =
+      graph_->parameterBlockPtr(gnss_extrinsics_id_.asInteger());
+
+    for (const auto& index_pair : index_pairs) {
+      const GnssMeasurementIndex& index = index_pair.rov;
+      const Satellite& satellite = measurement_rov.getSat(index);
+      const char system = satellite.getSystem();
+      const std::string& prn = satellite.prn;
+
+      if (num_code_used.find(prn) == num_code_used.end()) {
+        num_code_used.insert(std::make_pair(prn, 0));
+      }
+      if (num_system_used.find(system) == num_system_used.end()) {
+        num_system_used.insert(std::make_pair(system, 0));
+      }
+      if (use_single_frequency && num_code_used.at(prn) > 0) continue;
+
+      Candidate candidate;
+      candidate.error = std::make_shared<PseudorangeErrorDD<7, 3>>(
+        measurement_rov, measurement_ref,
+        index_pair.rov, index_pair.ref, index_pair.rov_base, index_pair.ref_base,
+        gnss_base_options_.error_parameter);
+      candidate.error->setCoordinate(coordinate_);
+      candidate.group_key = std::make_tuple(
+        system, index_pair.rov_base.prn, index_pair.rov.code_type,
+        index_pair.ref.code_type, index_pair.rov_base.code_type,
+        index_pair.ref_base.code_type);
+      candidate.metadata.enabled = true;
+
+      double const* parameters[] = {
+        pose_parameter->parameters(), extrinsics_parameter->parameters()};
+      double direct_residual[1] = {
+        std::numeric_limits<double>::quiet_NaN()};
+      candidate.metadata.direct_evaluate_success = candidate.error->Evaluate(
+        parameters, direct_residual, nullptr);
+      if (candidate.metadata.direct_evaluate_success) {
+        candidate.metadata.direct_preopt_normalized_residual = direct_residual[0];
+      }
+
+      const size_t candidate_index = candidates.size();
+      candidates.push_back(candidate);
+      group_to_candidates[candidate.group_key].push_back(candidate_index);
+
+      num_code_used.at(prn)++;
+      num_system_used.at(system)++;
+    }
+
+    // Estimate factor reliability from same-epoch peer consistency. The
+    // estimated weight is diagnostics-only in Stage 2A; applied_weight stays 1.
+    for (const auto& group : group_to_candidates) {
+      std::vector<double> valid_residuals;
+      for (const size_t index : group.second) {
+        const auto& metadata = candidates[index].metadata;
+        if (metadata.direct_evaluate_success &&
+            std::isfinite(metadata.direct_preopt_normalized_residual)) {
+          valid_residuals.push_back(
+            metadata.direct_preopt_normalized_residual);
+        }
+      }
+
+      const size_t peer_count = valid_residuals.size();
+      double peer_median = std::numeric_limits<double>::quiet_NaN();
+      double peer_scale = std::numeric_limits<double>::quiet_NaN();
+      if (peer_count >= 4) {
+        peer_median = getMedian(valid_residuals);
+        std::vector<double> absolute_deviations;
+        absolute_deviations.reserve(valid_residuals.size());
+        for (const double residual : valid_residuals) {
+          absolute_deviations.push_back(std::fabs(residual - peer_median));
+        }
+        peer_scale = std::max(1.0, 1.4826 * getMedian(absolute_deviations));
+      }
+
+      for (const size_t index : group.second) {
+        auto& metadata = candidates[index].metadata;
+        metadata.peer_count = peer_count;
+        metadata.peer_median = peer_median;
+        metadata.peer_scale = peer_scale;
+        metadata.applied_weight = 1.0;
+        if (peer_count < 4 || !metadata.direct_evaluate_success ||
+            !std::isfinite(metadata.direct_preopt_normalized_residual)) {
+          metadata.estimated_weight = 1.0;
+          continue;
+        }
+
+        metadata.reliability_indicator = std::fabs(
+          metadata.direct_preopt_normalized_residual - peer_median) / peer_scale;
+        if (metadata.reliability_indicator <= 3.0) {
+          metadata.estimated_weight = 1.0;
+        }
+        else {
+          metadata.estimated_weight = std::max(
+            0.1, 9.0 / (metadata.reliability_indicator *
+                        metadata.reliability_indicator));
+        }
+      }
+    }
+
+    is_state_pose_ = true;
+    for (auto& candidate : candidates) {
+      candidate.error->setReliabilityMetadata(candidate.metadata);
+      const ceres::ResidualBlockId residual_block_id = graph_->addResidualBlock(
+        candidate.error,
+        huber_loss_function_ ? huber_loss_function_.get() : nullptr,
+        pose_parameter, extrinsics_parameter);
+
+      double graph_residual[1] = {
+        std::numeric_limits<double>::quiet_NaN()};
+      candidate.metadata.post_insertion_evaluate_success =
+        graph_->problem()->EvaluateResidualBlock(
+          residual_block_id, false, nullptr, graph_residual, nullptr);
+      if (candidate.metadata.post_insertion_evaluate_success) {
+        candidate.metadata.post_insertion_normalized_residual = graph_residual[0];
+      }
+      candidate.error->setReliabilityMetadata(candidate.metadata);
+    }
+
+    num_valid_satellite = num_code_used.size() + num_system_used.size();
+    return;
+  }
+
   ceres::LossFunction* loss_function =
     use_cauchy_loss_for_dd_pseudorange ?
     (cauchy_loss_function_ ? cauchy_loss_function_.get() : nullptr) :
