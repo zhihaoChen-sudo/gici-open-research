@@ -1,11 +1,11 @@
 # Current Task Status
 
-Last reconciled: 2026-08-20
+Last reconciled: 2026-08-21
 
 ## Current objective
 
-Finish and validate diagnostics-only instrumentation for the RTK/IMU/Camera
-RRR estimator before any new robustness algorithm is proposed.
+Transition from diagnostics instrumentation to controlled algorithm
+development for the RTK/IMU/Camera RRR estimator.
 
 The immediate research question is why severe GNSS-related tails can remain
 even though the validated diagnostic baseline already attaches the shared
@@ -15,15 +15,17 @@ must first provide comparable pre-opt and post-fit evidence, robust-loss
 diagnostics, rejection attribution, multi-sensor residual diagnostics, and
 core update timing.
 
-This is a diagnostics phase. Do not change estimator mathematics unless an
-explicit later task authorizes it.
+The diagnostics implementation phase is complete at `f5edd11`. The remaining
+diagnostic caveat is limited to runtime revalidation of the repaired GNSS CSV
+output; it does not authorize a redesign of the research direction.
 
 ---
 
 ## Repository state
 
 - Branch: `exp/pseudorange-firstsolve-huber`
-- HEAD: `696300a` (`diag(gnss): add pre-opt residual and timing diagnostics`)
+- HEAD: `f5edd11` (`baseline: finalize diagnostics phase before algorithm
+  development`)
 - Validated diagnostics baseline tag: `rrr-diagnostics-baseline-v1` at
   `f5c2125`
 - Separate historical experiment branch: `exp/reopt-after-gnss-rejection` at
@@ -33,15 +35,13 @@ explicit later task authorizes it.
 The branch name is historical. No optional pseudorange-Huber experiment,
 no Huber delta change, and no new algorithm option are currently implemented.
 
-### Current uncommitted implementation changes
+### Current uncommitted documentation change
 
-The following implementation files are modified relative to `HEAD`:
+`docs/research/ALGORITHM_DECISION.md` is staged and modified relative to
+`HEAD`. It records the current candidate hypothesis; it does not implement an
+algorithm change.
 
-- `src/gnss/gnss_estimator_base_logger.cpp`
-- `tools/check_gnss_residual_csv.py`
-
-They only repair GNSS diagnostic CSV output and add an offline CSV
-field-count checker. This status file is also modified by this reconciliation.
+There are no uncommitted implementation changes.
 
 ---
 
@@ -81,7 +81,7 @@ baseline loss.
 
 ### GNSS pre-opt/post-fit pairing and loss diagnostics
 
-The current diff adds:
+The current HEAD includes:
 
 - `gnss_preopt_residual_diagnostics-<timestamp>.csv`, enumerated for the
   latest GNSS state after factors enter the graph and immediately before the
@@ -130,10 +130,9 @@ latency.
 All new evaluation failures and absent error interfaces are warning-and-skip
 paths; the residual buffer is not read after a failed evaluation.
 
-### Pending GNSS CSV diagnostics repair
+### Completed GNSS CSV diagnostics repair
 
-A new 4.1 diagnostic baseline run exposed two logger defects that must be
-revalidated before drawing factor-level conclusions from the CSVs:
+A 4.1 diagnostic baseline run exposed two logger defects:
 
 - DD pseudorange and DD carrier-phase rows omitted the empty `doppler_lli`
   cell, producing 32 fields against the original 33-field header and shifting
@@ -142,8 +141,8 @@ revalidated before drawing factor-level conclusions from the CSVs:
   lookup caused the logger to `continue`, so the factor row was absent even
   though the pre-opt summary retained its normalized residual.
 
-The pending repair appends `metadata_complete` to both GNSS residual CSVs,
-preserves every successfully evaluated GNSS factor row, leaves unavailable
+Commit `f5edd11` repairs these issues: it appends `metadata_complete` to both
+GNSS residual CSVs, preserves every successfully evaluated GNSS factor row, leaves unavailable
 metadata blank, and adds an offline field-count checker. It does not change
 any estimator computation.
 
@@ -156,11 +155,12 @@ any estimator computation.
 - Review of the complete current `git diff`.
 - `git diff --check` passed after the current diagnostic changes.
 - A 4.1 diagnostic baseline run was completed and jointly analyzed; it
-  identified the pending CSV field-alignment and metadata-row-loss defects.
+  identified the CSV field-alignment and metadata-row-loss defects.
+- The CSV repair and offline checker were committed in `f5edd11`.
 
 ## Validation not yet performed
 
-- Compilation of the pending CSV diagnostics repair.
+- Compilation of the CSV diagnostics repair.
 - ROS/RRR runtime execution with the repaired CSV output.
 - Inspection of produced pre-opt/post-fit CSV rows and headers.
 - Verification that a pre/post pair shares the expected residual UID and that
@@ -169,12 +169,25 @@ any estimator computation.
 - Timing sanity check against runtime logs.
 - Dataset-level residual/APE/AR analysis or numerical-position comparison.
 
-Do not describe this uncommitted work as compiled, runtime tested, or
+Do not describe this committed work as compiled, runtime tested, or
 experimentally validated.
 
 ---
 
-## Important decisions and lessons
+## Validated and negative findings
+
+### Validated findings
+
+- The diagnostics baseline covers GNSS, Vision, IMU, Motion, GNSS rejection,
+  RRR epoch state, AR/unfix status, pre-opt/post-fit GNSS pairing, robust-loss
+  quantities, and core update timing.
+- The source audit verifies that the existing shared `HuberLoss(1)` is applied
+  to DD pseudorange, DD carrier phase, and rover Doppler factors.
+- The 4.1 baseline run verified that the diagnostic CSV defects described
+  above existed. Their implementation repair is committed, but its runtime
+  output has not yet been revalidated.
+
+### Negative findings and rejected approaches
 
 1. **No new Huber experiment is currently warranted.** The earlier intended
    comparison of `loss=nullptr` versus `Huber(1.345)` was rejected after the
@@ -208,10 +221,22 @@ experimentally validated.
 
 ---
 
-## Exact next step
+## Current algorithm hypothesis
 
-After reviewing the pending repair, compile it in the user's known-working ROS
-environment. If compilation succeeds, run one unchanged baseline RRR
+The current, unvalidated hypothesis recorded in
+`docs/research/ALGORITHM_DECISION.md` is that persistent DD-pseudorange gross
+inconsistency entering the first nonlinear solve is the dominant unresolved
+failure mode. The document names a DD-pseudorange-only redescending robust
+loss as its first candidate and keeps all other factor classes and the AR
+pipeline unchanged.
+
+This is a research hypothesis, not a validated causal conclusion and not an
+implemented algorithm. The existing negative findings above remain in force.
+
+## Next experimental plan
+
+First compile and run the committed diagnostics baseline in the user's
+known-working ROS environment. For the repaired output, run one unchanged RRR
 configuration with intermediate logging enabled, then use
 `python3 tools/check_gnss_residual_csv.py <preopt.csv> <postfit.csv>` and
 inspect a short time window to verify:
@@ -227,10 +252,10 @@ inspect a short time window to verify:
    configuration without diagnostics, within normal deterministic/replay
    expectations.
 
-Only after that runtime evidence is available should the pre-opt/post-fit
-GNSS, Vision, IMU, Motion, rejection, AR, and APE timelines be analyzed to
-choose a single causal algorithm hypothesis. Do not add Huber variants,
-adaptive weighting, or ambiguity changes before this validation.
+Then preserve the baseline configuration and compare the already recorded
+single candidate against it. Do not combine mechanisms or alter carrier phase,
+Doppler, Vision, IMU, Motion, or AR behavior in the first controlled
+experiment.
 
 ---
 
@@ -240,8 +265,10 @@ adaptive weighting, or ambiguity changes before this validation.
   implemented in the validated diagnostics baseline
 - [x] pre-opt/loss/summary/timing diagnostics committed at `696300a`
 - [x] current `git diff --check`
-- [ ] compilation of pending CSV diagnostics repair
+- [x] GNSS CSV repair and offline field-count checker committed at `f5edd11`
+- [ ] compilation of the committed diagnostics baseline
 - [ ] runtime execution and CSV inspection
 - [ ] timing sanity check
 - [ ] numerical/trajectory comparison
+- [ ] controlled single-candidate algorithm experiment
 - [ ] dataset-level failure attribution and experimental conclusion

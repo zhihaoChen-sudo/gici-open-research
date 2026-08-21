@@ -33,6 +33,10 @@ Record:
 
 ## Stage 2 - Diagnostics
 
+Status: implementation complete at `f5edd11`. A repaired GNSS diagnostic CSV
+must still be runtime-revalidated before factor-level values from that repair
+are used as experimental evidence.
+
 Investigate:
 
 - pre-optimization GNSS residuals
@@ -67,6 +71,12 @@ Determine whether degradation is primarily caused by:
 
 ## Stage 4 - Algorithm design
 
+Current handoff hypothesis: persistent DD-pseudorange gross inconsistency can
+enter the first nonlinear solve. The already recorded first candidate is a
+DD-pseudorange-only redescending robust loss; it is not implemented or
+validated. Keep carrier phase, Doppler, Vision, IMU, Motion, and the AR
+pipeline unchanged for the first controlled comparison.
+
 Potential directions:
 
 - adaptive GNSS weighting
@@ -77,10 +87,21 @@ Potential directions:
 - RRR trigger redesign
 
 Every algorithm modification must have a corresponding hypothesis.
+Do not redesign the research direction or introduce additional algorithms
+until the controlled result for the recorded candidate is available.
 
 ---
 
 ## Stage 5 - Controlled experiments
+
+Next experiment sequence:
+
+1. compile and run the committed diagnostics baseline;
+2. validate repaired GNSS CSV field counts, residual pairing, loss fields, and
+   timing with one unchanged baseline configuration;
+3. use that configuration as the comparator for the single recorded candidate;
+4. analyze position, residual, rejection, AR, and timing outcomes before any
+   further design decision.
 
 Compare:
 
