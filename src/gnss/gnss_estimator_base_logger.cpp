@@ -27,6 +27,8 @@ bool findDiagnosticObservation(
   const double measurement_ref_time, const Satellite** satellite,
   const Observation** observation)
 {
+  *satellite = nullptr;
+  *observation = nullptr;
   const auto satellite_it = measurement.satellites.find(index.prn);
   if (satellite_it == measurement.satellites.end()) {
     LOG(WARNING) << "GNSS residual diagnostics observation unavailable: role="
@@ -39,6 +41,7 @@ bool findDiagnosticObservation(
   }
 
   const Satellite& found_satellite = satellite_it->second;
+  *satellite = &found_satellite;
   const auto observation_it = found_satellite.observations.find(index.code_type);
   if (observation_it == found_satellite.observations.end()) {
     std::string available;
@@ -55,7 +58,6 @@ bool findDiagnosticObservation(
     return false;
   }
 
-  *satellite = &found_satellite;
   *observation = &observation_it->second;
   return true;
 }
@@ -163,7 +165,7 @@ void GnssEstimatorBase::createGnssResidualDiagnosticsLogger(const std::string& d
     "rov_target_snr,ref_target_snr,rov_base_snr,ref_base_snr,doppler_snr,"
     "rov_target_slip,ref_target_slip,rov_base_slip,ref_base_slip,doppler_slip,"
     "rov_target_lli,ref_target_lli,rov_base_lli,ref_base_lli,doppler_lli,"
-    "loss_type,loss_delta,rho0,rho1,rho2";
+    "loss_type,loss_delta,rho0,rho1,rho2,metadata_complete";
   gnss_residual_diagnostics_logger_ << header << '\n';
   if (gnss_preopt_residual_diagnostics_logger_.is_open()) {
     gnss_preopt_residual_diagnostics_logger_ << header << '\n';
@@ -554,9 +556,10 @@ void GnssEstimatorBase::logGnssResidualDiagnostics(
         type == ErrorType::kPhaserangeErrorDD) {
       const GnssMeasurementDDIndexPair index =
         getGnssMeasurementDDIndexPairFromErrorInterface(interface);
-      const Satellite *rov_target_satellite, *ref_target_satellite,
-        *rov_base_satellite, *ref_base_satellite;
-      const Observation *rov_target, *ref_target, *rov_base, *ref_base;
+      const Satellite *rov_target_satellite = nullptr, *ref_target_satellite = nullptr,
+        *rov_base_satellite = nullptr, *ref_base_satellite = nullptr;
+      const Observation *rov_target = nullptr, *ref_target = nullptr,
+        *rov_base = nullptr, *ref_base = nullptr;
       const bool has_rov_target = findDiagnosticObservation(
         measurement_rov, index.rov, "rov_target", state.timestamp,
         measurement_rov.timestamp, measurement_ref.timestamp,
@@ -573,13 +576,8 @@ void GnssEstimatorBase::logGnssResidualDiagnostics(
         measurement_ref, index.ref_base, "ref_base", state.timestamp,
         measurement_rov.timestamp, measurement_ref.timestamp,
         &ref_base_satellite, &ref_base);
-      if (!has_rov_target || !has_ref_target || !has_rov_base || !has_ref_base) {
-        continue;
-      }
-      const double rov_target_elevation = gnss_common::satelliteElevation(
-        rov_target_satellite->sat_position, measurement_rov.position) * R2D;
-      const double rov_base_elevation = gnss_common::satelliteElevation(
-        rov_base_satellite->sat_position, measurement_rov.position) * R2D;
+      const bool metadata_complete = has_rov_target && has_ref_target &&
+        has_rov_base && has_ref_base;
 
       logger
         << std::setprecision(15) << state.timestamp << ","
@@ -587,46 +585,73 @@ void GnssEstimatorBase::logGnssResidualDiagnostics(
         << "," << reinterpret_cast<uint64_t>(residual_block.residual_block_id)
         << "," << index.rov.prn << "," << index.rov_base.prn << ",,"
         << index.rov.code_type << "," << normalized_residual << ","
-        << raw_residual << "," << effective_sigma << ","
-        << rov_target_elevation << "," << rov_base_elevation << ",,"
-        << rov_target->SNR << "," << ref_target->SNR << ","
-        << rov_base->SNR << "," << ref_base->SNR << ",,"
-        << static_cast<int>(rov_target->slip) << ","
-        << static_cast<int>(ref_target->slip) << ","
-        << static_cast<int>(rov_base->slip) << ","
-        << static_cast<int>(ref_base->slip) << ",,"
-        << static_cast<int>(rov_target->LLI) << ","
-        << static_cast<int>(ref_target->LLI) << ","
-        << static_cast<int>(rov_base->LLI) << ","
-        << static_cast<int>(ref_base->LLI) << ","
+        << raw_residual << "," << effective_sigma << ",";
+      if (rov_target_satellite) {
+        logger << gnss_common::satelliteElevation(
+          rov_target_satellite->sat_position, measurement_rov.position) * R2D;
+      }
+      logger << ",";
+      if (rov_base_satellite) {
+        logger << gnss_common::satelliteElevation(
+          rov_base_satellite->sat_position, measurement_rov.position) * R2D;
+      }
+      logger << ",,";
+      if (rov_target) logger << rov_target->SNR;
+      logger << ",";
+      if (ref_target) logger << ref_target->SNR;
+      logger << ",";
+      if (rov_base) logger << rov_base->SNR;
+      logger << ",";
+      if (ref_base) logger << ref_base->SNR;
+      logger << ",,";
+      if (rov_target) logger << static_cast<int>(rov_target->slip);
+      logger << ",";
+      if (ref_target) logger << static_cast<int>(ref_target->slip);
+      logger << ",";
+      if (rov_base) logger << static_cast<int>(rov_base->slip);
+      logger << ",";
+      if (ref_base) logger << static_cast<int>(ref_base->slip);
+      logger << ",,";
+      if (rov_target) logger << static_cast<int>(rov_target->LLI);
+      logger << ",";
+      if (ref_target) logger << static_cast<int>(ref_target->LLI);
+      logger << ",";
+      if (rov_base) logger << static_cast<int>(rov_base->LLI);
+      logger << ",";
+      if (ref_base) logger << static_cast<int>(ref_base->LLI);
+      logger << ",,"
         << loss_type << "," << loss_delta << "," << rho[0] << ","
-        << rho[1] << "," << rho[2]
+        << rho[1] << "," << rho[2] << "," << metadata_complete
         << '\n';
     }
     else {
       const GnssMeasurementIndex index =
         getGnssMeasurementIndexFromErrorInterface(interface);
-      const Satellite* satellite;
-      const Observation* observation;
-      if (!findDiagnosticObservation(
-            measurement_rov, index, "doppler", state.timestamp,
-            measurement_rov.timestamp, measurement_ref.timestamp,
-            &satellite, &observation)) {
-        continue;
-      }
-      const double elevation = gnss_common::satelliteElevation(
-        satellite->sat_position, measurement_rov.position) * R2D;
+      const Satellite* satellite = nullptr;
+      const Observation* observation = nullptr;
+      const bool metadata_complete = findDiagnosticObservation(
+        measurement_rov, index, "doppler", state.timestamp,
+        measurement_rov.timestamp, measurement_ref.timestamp,
+        &satellite, &observation);
 
       logger
         << std::setprecision(15) << state.timestamp << ","
         << "doppler," << reinterpret_cast<uint64_t>(residual_block.residual_block_id)
         << ",,," << index.prn << "," << index.code_type << ","
         << normalized_residual << "," << raw_residual << ","
-        << effective_sigma << ",,," << elevation << ",,,,,"
-        << observation->SNR << ",,,,,"
-        << static_cast<int>(observation->slip) << ",,,,,"
-        << static_cast<int>(observation->LLI) << "," << loss_type << ","
-        << loss_delta << "," << rho[0] << "," << rho[1] << "," << rho[2] << '\n';
+        << effective_sigma << ",,,";
+      if (satellite) {
+        logger << gnss_common::satelliteElevation(
+          satellite->sat_position, measurement_rov.position) * R2D;
+      }
+      logger << ",,,,,";
+      if (observation) logger << observation->SNR;
+      logger << ",,,,,";
+      if (observation) logger << static_cast<int>(observation->slip);
+      logger << ",,,,,";
+      if (observation) logger << static_cast<int>(observation->LLI);
+      logger << "," << loss_type << "," << loss_delta << "," << rho[0]
+        << "," << rho[1] << "," << rho[2] << "," << metadata_complete << '\n';
     }
   }
 }

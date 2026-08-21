@@ -23,7 +23,7 @@ explicit later task authorizes it.
 ## Repository state
 
 - Branch: `exp/pseudorange-firstsolve-huber`
-- HEAD: `80ac8b1` (`docs: add research workflow and task state`)
+- HEAD: `696300a` (`diag(gnss): add pre-opt residual and timing diagnostics`)
 - Validated diagnostics baseline tag: `rrr-diagnostics-baseline-v1` at
   `f5c2125`
 - Separate historical experiment branch: `exp/reopt-after-gnss-rejection` at
@@ -37,13 +37,11 @@ no Huber delta change, and no new algorithm option are currently implemented.
 
 The following implementation files are modified relative to `HEAD`:
 
-- `include/gici/gnss/gnss_estimator_base.h`
 - `src/gnss/gnss_estimator_base_logger.cpp`
-- `include/gici/fusion/rtk_imu_camera_rrr_estimator.h`
-- `src/fusion/rtk_imu_camera_rrr_estimator.cpp`
+- `tools/check_gnss_residual_csv.py`
 
-They add diagnostics only. This status file is also modified by this
-reconciliation.
+They only repair GNSS diagnostic CSV output and add an offline CSV
+field-count checker. This status file is also modified by this reconciliation.
 
 ---
 
@@ -79,7 +77,7 @@ baseline loss.
 
 ---
 
-## Current uncommitted diagnostics work
+## Diagnostics implemented at the current HEAD
 
 ### GNSS pre-opt/post-fit pairing and loss diagnostics
 
@@ -132,6 +130,23 @@ latency.
 All new evaluation failures and absent error interfaces are warning-and-skip
 paths; the residual buffer is not read after a failed evaluation.
 
+### Pending GNSS CSV diagnostics repair
+
+A new 4.1 diagnostic baseline run exposed two logger defects that must be
+revalidated before drawing factor-level conclusions from the CSVs:
+
+- DD pseudorange and DD carrier-phase rows omitted the empty `doppler_lli`
+  cell, producing 32 fields against the original 33-field header and shifting
+  the loss columns; and
+- after `EvaluateResidualBlock()` succeeded, a missing guarded observation
+  lookup caused the logger to `continue`, so the factor row was absent even
+  though the pre-opt summary retained its normalized residual.
+
+The pending repair appends `metadata_complete` to both GNSS residual CSVs,
+preserves every successfully evaluated GNSS factor row, leaves unavailable
+metadata blank, and adds an offline field-count checker. It does not change
+any estimator computation.
+
 ---
 
 ## Validation performed
@@ -140,11 +155,13 @@ paths; the residual buffer is not read after a failed evaluation.
   `EstimatorBase` paths.
 - Review of the complete current `git diff`.
 - `git diff --check` passed after the current diagnostic changes.
+- A 4.1 diagnostic baseline run was completed and jointly analyzed; it
+  identified the pending CSV field-alignment and metadata-row-loss defects.
 
 ## Validation not yet performed
 
-- Compilation of the current uncommitted diff.
-- ROS/RRR runtime execution with these additions.
+- Compilation of the pending CSV diagnostics repair.
+- ROS/RRR runtime execution with the repaired CSV output.
 - Inspection of produced pre-opt/post-fit CSV rows and headers.
 - Verification that a pre/post pair shares the expected residual UID and that
   all current GNSS measurement factors report `huber,1`.
@@ -185,14 +202,19 @@ experimentally validated.
    Preserve guarded lookup and warning context rather than changing
    `getGnssMeasurementIndex()` or `GnssMeasurement::getObs()`.
 
+6. **A pre-opt summary and its factor CSV must enumerate the same successful
+   residual evaluations.** Metadata availability is contextual only; it must
+   not determine whether an already evaluated residual receives a CSV row.
+
 ---
 
 ## Exact next step
 
-Compile the current diagnostics-only diff in the user's known-working ROS
+After reviewing the pending repair, compile it in the user's known-working ROS
 environment. If compilation succeeds, run one unchanged baseline RRR
-configuration with intermediate logging enabled, then inspect a short time
-window to verify:
+configuration with intermediate logging enabled, then use
+`python3 tools/check_gnss_residual_csv.py <preopt.csv> <postfit.csv>` and
+inspect a short time window to verify:
 
 1. both GNSS CSVs are created with the documented header;
 2. pre-opt and post-fit rows share `residual_uid` within a run;
@@ -216,9 +238,9 @@ adaptive weighting, or ambiguity changes before this validation.
 
 - [x] factor-level GNSS, Vision, IMU, Motion, rejection, and epoch diagnostics
   implemented in the validated diagnostics baseline
-- [x] current pre-opt/loss/summary/timing diagnostic diff implemented
+- [x] pre-opt/loss/summary/timing diagnostics committed at `696300a`
 - [x] current `git diff --check`
-- [ ] compilation of current diff
+- [ ] compilation of pending CSV diagnostics repair
 - [ ] runtime execution and CSV inspection
 - [ ] timing sanity check
 - [ ] numerical/trajectory comparison
