@@ -273,11 +273,16 @@ void GnssEstimatorBase::addDdPseudorangeResidualBlocks(
   const GnssMeasurementDDIndexPairs& index_pairs,
   const State& state,
   int& num_valid_satellite,
-  bool use_single_frequency)
+  bool use_single_frequency,
+  bool use_cauchy_loss_for_dd_pseudorange)
 {
   CHECK(!(use_single_frequency && is_verbose_model_));
   num_valid_satellite = 0;
   const BackendId parameter_id = state.id;
+  ceres::LossFunction* loss_function =
+    use_cauchy_loss_for_dd_pseudorange ?
+    (cauchy_loss_function_ ? cauchy_loss_function_.get() : nullptr) :
+    (huber_loss_function_ ? huber_loss_function_.get() : nullptr);
 
   // Normal mode.  
   if (!is_verbose_model_) 
@@ -310,7 +315,7 @@ void GnssEstimatorBase::addDdPseudorangeResidualBlocks(
           index_pair.rov, index_pair.ref, index_pair.rov_base, index_pair.ref_base,
           gnss_base_options_.error_parameter);
         graph_->addResidualBlock(pseudorange_error, 
-          huber_loss_function_ ? huber_loss_function_.get() : nullptr,
+          loss_function,
           graph_->parameterBlockPtr(parameter_id.asInteger()));
       }
       // pose in ENU for fusion
@@ -324,7 +329,7 @@ void GnssEstimatorBase::addDdPseudorangeResidualBlocks(
           gnss_base_options_.error_parameter); 
         pseudorange_error->setCoordinate(coordinate_);
         graph_->addResidualBlock(pseudorange_error, 
-          huber_loss_function_ ? huber_loss_function_.get() : nullptr,
+          loss_function,
           graph_->parameterBlockPtr(pose_id.asInteger()), 
           graph_->parameterBlockPtr(gnss_extrinsics_id_.asInteger()));
       }

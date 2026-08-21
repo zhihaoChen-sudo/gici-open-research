@@ -4,8 +4,8 @@ Last reconciled: 2026-08-21
 
 ## Current objective
 
-Transition from diagnostics instrumentation to controlled algorithm
-development for the RTK/IMU/Camera RRR estimator.
+Implement and validate the first controlled single-factor algorithm experiment
+for the RTK/IMU/Camera RRR estimator.
 
 The immediate research question is why severe GNSS-related tails can remain
 even though the validated diagnostic baseline already attaches the shared
@@ -15,33 +15,38 @@ must first provide comparable pre-opt and post-fit evidence, robust-loss
 diagnostics, rejection attribution, multi-sensor residual diagnostics, and
 core update timing.
 
-The diagnostics implementation phase is complete at `f5edd11`. The remaining
-diagnostic caveat is limited to runtime revalidation of the repaired GNSS CSV
-output; it does not authorize a redesign of the research direction.
+The diagnostics implementation phase is complete at `f5edd11`. The first
+candidate now implemented in the worktree is an RRR-only option that replaces
+Huber(1) with Cauchy(1) for DD pseudorange factors. It is not compiled or
+runtime validated.
 
 ---
 
 ## Repository state
 
 - Branch: `exp/pseudorange-firstsolve-huber`
-- HEAD: `f5edd11` (`baseline: finalize diagnostics phase before algorithm
-  development`)
+- HEAD: `a7d2cab` (`docs: finalize diagnostics phase and algorithm decision`)
 - Validated diagnostics baseline tag: `rrr-diagnostics-baseline-v1` at
   `f5c2125`
 - Separate historical experiment branch: `exp/reopt-after-gnss-rejection` at
   `cd42a61`; it is **not** the current branch and its second-optimize code is
   not present in the current worktree.
 
-The branch name is historical. No optional pseudorange-Huber experiment,
-no Huber delta change, and no new algorithm option are currently implemented.
+No final adaptive method, Huber delta change, rejection change, second solve,
+or ambiguity change is implemented.
 
-### Current uncommitted documentation change
+### Current uncommitted experiment change
 
-`docs/research/ALGORITHM_DECISION.md` is staged and modified relative to
-`HEAD`. It records the current candidate hypothesis; it does not implement an
-algorithm change.
+The worktree contains the first controlled mechanism experiment. A new
+`RtkImuCameraRrrEstimatorOptions` flag,
+`use_cauchy_loss_for_dd_pseudorange`, defaults to `false`. Only the
+RTK/IMU/Camera RRR caller passes it to DD pseudorange factor construction.
+When enabled, those factors use the existing shared `CauchyLoss(1)`; all other
+callers retain Huber(1) through the helper's default argument.
 
-There are no uncommitted implementation changes.
+The diagnostic logger now identifies the shared Cauchy pointer as
+`loss_type=cauchy` with scale 1. No residual evaluation or other diagnostic
+semantics changed. RRR sample configurations explicitly retain `false`.
 
 ---
 
@@ -221,7 +226,7 @@ experimentally validated.
 
 ---
 
-## Current algorithm hypothesis
+## Current algorithm hypothesis and implementation
 
 The current, unvalidated hypothesis recorded in
 `docs/research/ALGORITHM_DECISION.md` is that persistent DD-pseudorange gross
@@ -230,8 +235,10 @@ failure mode. The document names a DD-pseudorange-only redescending robust
 loss as its first candidate and keeps all other factor classes and the AR
 pipeline unchanged.
 
-This is a research hypothesis, not a validated causal conclusion and not an
-implemented algorithm. The existing negative findings above remain in force.
+The controlled Cauchy(1) mechanism is implemented behind an RRR-only,
+default-false option. This is still a research hypothesis, not a validated
+causal conclusion or final adaptive method. The existing negative findings
+above remain in force.
 
 ## Next experimental plan
 
@@ -252,10 +259,11 @@ inspect a short time window to verify:
    configuration without diagnostics, within normal deterministic/replay
    expectations.
 
-Then preserve the baseline configuration and compare the already recorded
-single candidate against it. Do not combine mechanisms or alter carrier phase,
-Doppler, Vision, IMU, Motion, or AR behavior in the first controlled
-experiment.
+Then compare the same build and configuration with
+`use_cauchy_loss_for_dd_pseudorange=false` and `true`. Verify that false logs
+Huber(1) for all GNSS factors, while true logs Cauchy(1) only for DD
+pseudorange and Huber(1) for DD carrier phase and Doppler. Do not combine
+mechanisms or alter Vision, IMU, Motion, rejection, solver, or AR behavior.
 
 ---
 
@@ -266,7 +274,10 @@ experiment.
 - [x] pre-opt/loss/summary/timing diagnostics committed at `696300a`
 - [x] current `git diff --check`
 - [x] GNSS CSV repair and offline field-count checker committed at `f5edd11`
+- [x] RRR-only, default-false DD pseudorange Cauchy(1) option implemented
+- [x] diagnostics distinguish Huber and Cauchy loss pointers
 - [ ] compilation of the committed diagnostics baseline
+- [ ] compilation of the controlled Cauchy experiment
 - [ ] runtime execution and CSV inspection
 - [ ] timing sanity check
 - [ ] numerical/trajectory comparison

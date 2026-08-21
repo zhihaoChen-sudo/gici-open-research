@@ -572,7 +572,8 @@ bool RtkImuCameraRrrEstimator::addGnssMeasurementAndState(
   // Add pseudorange residual blocks
   int num_valid_satellite = 0;
   addDdPseudorangeResidualBlocks(curGnssRov(), 
-    curGnssRef(), code_index_pairs, states_[index], num_valid_satellite);
+    curGnssRef(), code_index_pairs, states_[index], num_valid_satellite, false,
+    rrr_options_.use_cauchy_loss_for_dd_pseudorange);
   
   // We do not need to check if the number of satellites is sufficient in tightly fusion.
   if (!checkSufficientSatellite(num_valid_satellite, 0)) {

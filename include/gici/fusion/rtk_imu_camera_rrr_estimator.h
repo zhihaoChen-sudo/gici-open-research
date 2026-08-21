@@ -34,6 +34,9 @@ struct RtkImuCameraRrrEstimatorOptions {
 
   // Maximum yaw STD to start visual initialization (deg)
   double min_yaw_std_init_visual = 0.5;
+
+  // Use CauchyLoss(1) only for DD pseudorange factors in this estimator
+  bool use_cauchy_loss_for_dd_pseudorange = false;
 };
 
 // Estimator

@@ -218,7 +218,8 @@ protected:
     const GnssMeasurementDDIndexPairs& index_pairs,
     const State& state,
     int& num_valid_satellite,
-    bool use_single_frequency = false);
+    bool use_single_frequency = false,
+    bool use_cauchy_loss_for_dd_pseudorange = false);
 
   // Add phaserange residual blocks to graph
   void addPhaserangeResidualBlocks(

@@ -549,6 +549,11 @@ void GnssEstimatorBase::logGnssResidualDiagnostics(
         // Must match EstimatorBase's shared HuberLoss(1) construction.
         loss_delta = 1.0;
       }
+      else if (residual_block.loss_function_ptr == cauchy_loss_function_.get()) {
+        loss_type = "cauchy";
+        // Must match EstimatorBase's shared CauchyLoss(1) construction.
+        loss_delta = 1.0;
+      }
       else loss_type = "other";
     }
 
