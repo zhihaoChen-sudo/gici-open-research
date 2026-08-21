@@ -67,6 +67,14 @@ Graph::Graph()
   //options.linear_solver_ordering = new ceres::ParameterBlockOrdering;
 }
 
+// Destructor.
+Graph::~Graph()
+{
+  // ResidualBlockSpec may own factor-specific loss functions. Destroy the
+  // Ceres problem while those owners are still alive.
+  problem_.reset();
+}
+
 // Check whether a certain parameter block is part of the graph.
 bool Graph::parameterBlockExists(uint64_t parameter_block_id) const
 {
@@ -440,6 +448,37 @@ ceres::ResidualBlockId Graph::addResidualBlock(
   }
 
   return return_id;
+}
+
+// Adds a residual block and keeps its factor-specific loss function alive.
+ceres::ResidualBlockId Graph::addResidualBlockWithOwnedLoss(
+    std::shared_ptr< ceres::CostFunction> cost_function,
+    std::shared_ptr<ceres::LossFunction> loss_function,
+    std::vector<std::shared_ptr<ParameterBlock> >& parameter_block_ptrs)
+{
+  CHECK(loss_function != nullptr) << "Owned loss function must not be null";
+
+  ceres::ResidualBlockId residual_block_id = addResidualBlock(
+    cost_function, loss_function.get(), parameter_block_ptrs);
+  if (!residual_block_id) return residual_block_id;
+
+  auto spec_it = residual_block_id_to_residual_block_spec_map_.find(
+    residual_block_id);
+  CHECK(spec_it != residual_block_id_to_residual_block_spec_map_.end());
+  CHECK(spec_it->second.loss_function_ptr == loss_function.get());
+  spec_it->second.loss_function_owner = loss_function;
+
+  for (const auto& parameter_block_ptr : parameter_block_ptrs) {
+    auto range = id_to_residual_block_multimap_.equal_range(
+      parameter_block_ptr->id());
+    for (auto it = range.first; it != range.second; ++it) {
+      if (it->second.residual_block_id != residual_block_id) continue;
+      CHECK(it->second.loss_function_ptr == loss_function.get());
+      it->second.loss_function_owner = loss_function;
+    }
+  }
+
+  return residual_block_id;
 }
 
 // Add a residual block. See respective ceres docu. If more are needed, see other interface.
@@ -901,4 +940,3 @@ double Graph::computeTotalCost(bool apply_loss_function)
 }
 
 }  //namespace gici
-

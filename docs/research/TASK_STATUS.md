@@ -4,28 +4,19 @@ Last reconciled: 2026-08-21
 
 ## Current objective
 
-Implement and validate the first controlled single-factor algorithm experiment
-for the RTK/IMU/Camera RRR estimator.
-
-The immediate research question is why severe GNSS-related tails can remain
-even though the validated diagnostic baseline already attaches the shared
-`EstimatorBase::huber_loss_function_` (`ceres::HuberLoss(1)`) to DD
-pseudorange, DD carrier phase, and rover Doppler factors. The current code
-must first provide comparable pre-opt and post-fit evidence, robust-loss
-diagnostics, rejection attribution, multi-sensor residual diagnostics, and
-core update timing.
-
-The diagnostics implementation phase is complete at `f5edd11`. The first
-candidate now implemented in the worktree is an RRR-only option that replaces
-Huber(1) with Cauchy(1) for DD pseudorange factors. It is not compiled or
-runtime validated.
+Develop multi-source reliability-aware fusion without further robust-loss
+replacement. The active implementation is Phase 1 only: add optional Graph
+ownership for factor-specific loss functions. No estimator currently uses the
+new owned-loss API, and DD pseudorange reliability weighting is reserved for
+Phase 2.
 
 ---
 
 ## Repository state
 
 - Branch: `exp/pseudorange-firstsolve-huber`
-- HEAD: `a7d2cab` (`docs: finalize diagnostics phase and algorithm decision`)
+- HEAD before the current worktree change: `f458046`
+  (`research: add configurable DD pseudorange Cauchy loss experiment`)
 - Validated diagnostics baseline tag: `rrr-diagnostics-baseline-v1` at
   `f5c2125`
 - Separate historical experiment branch: `exp/reopt-after-gnss-rejection` at
@@ -35,18 +26,43 @@ runtime validated.
 No final adaptive method, Huber delta change, rejection change, second solve,
 or ambiguity change is implemented.
 
-### Current uncommitted experiment change
+## Phase 1 final summary: Graph-owned loss infrastructure
 
-The worktree contains the first controlled mechanism experiment. A new
-`RtkImuCameraRrrEstimatorOptions` flag,
-`use_cauchy_loss_for_dd_pseudorange`, defaults to `false`. Only the
-RTK/IMU/Camera RRR caller passes it to DD pseudorange factor construction.
-When enabled, those factors use the existing shared `CauchyLoss(1)`; all other
-callers retain Huber(1) through the helper's default argument.
+**Status:** implemented and statically inspected; `git diff --check` passed.
+It has not been compiled or runtime tested.
 
-The diagnostic logger now identifies the shared Cauchy pointer as
-`loss_type=cauchy` with scale 1. No residual evaluation or other diagnostic
-semantics changed. RRR sample configurations explicitly retain `false`.
+Modified production files:
+
+- `include/gici/estimate/graph.h`
+- `src/estimate/graph.cpp`
+
+`Graph::ResidualBlockSpec` now has an optional shared owner for a
+factor-specific `ceres::LossFunction`, and the opt-in
+`Graph::addResidualBlockWithOwnedLoss()` API stores that owner while Ceres
+continues to receive the same raw pointer under `DO_NOT_TAKE_OWNERSHIP`.
+Removal still calls `ceres::Problem::RemoveResidualBlock()` before erasing the
+Graph bookkeeping that owns the loss. Parameter removal, marginalization, and
+direct residual removal therefore converge on the same safe release path. The
+explicit `Graph` destructor destroys the Ceres Problem before member maps and
+their owned losses are destroyed.
+
+Baseline mathematics is unchanged: every existing factor still calls the
+original `addResidualBlock()` API, all existing loss pointers remain borrowed,
+and no caller uses the new owned-loss API. Residual models, factor ordering,
+solver settings, rejection, ambiguity resolution, marginalization logic, and
+diagnostics are unchanged. No Phase 2 reliability option, indicator, weight,
+or DD pseudorange cost scaling is implemented.
+
+Remaining validation before relying on the infrastructure:
+
+1. compile the repository in the known-working environment;
+2. run a focused owned/borrowed loss lifetime test covering direct residual
+   removal, parameter-removal cascade, reset, marginalization, and Graph
+   destruction, preferably with AddressSanitizer;
+3. run the existing option-false baseline and confirm unchanged factor counts,
+   loss diagnostics, solver costs, rejection/AR sequence, and trajectory; and
+4. verify the new owned-loss API still has no production caller before Phase 2
+   begins.
 
 ---
 

@@ -70,6 +70,9 @@ public:
   /// @brief Constructor.
   Graph();
 
+  /// @brief Destructor.
+  ~Graph();
+
   // definitions
   /// @brief Struct to store some infos about a residual.
   struct ResidualBlockSpec
@@ -77,6 +80,7 @@ public:
     ResidualBlockSpec()
         : residual_block_id(0),
           loss_function_ptr(0),
+          loss_function_owner(std::shared_ptr<ceres::LossFunction>()),
           error_interface_ptr(std::shared_ptr<ErrorInterface>())
     {}
 
@@ -95,6 +99,8 @@ public:
 
     ceres::ResidualBlockId residual_block_id; ///< ID of residual block.
     ceres::LossFunction* loss_function_ptr; ///< The m-estimator.
+    std::shared_ptr<ceres::LossFunction> loss_function_owner;
+    ///< Optional owner for factor-specific loss functions.
     std::shared_ptr<ErrorInterface> error_interface_ptr;
     ///< The pointer to the error interface of the respective residual block.
   };
@@ -179,6 +185,19 @@ public:
   ceres::ResidualBlockId addResidualBlock(
       std::shared_ptr< ceres::CostFunction> cost_function,
       ceres::LossFunction* loss_function,
+      std::vector<std::shared_ptr<ParameterBlock> >& parameter_block_ptrs);
+
+  /**
+   * @brief Adds a residual block and keeps its loss function alive.
+   * @param[in] cost_function The error term to be used.
+   * @param[in] loss_function The factor-specific loss function owned by Graph.
+   * @param[in] parameter_block_ptrs A vector that contains all the parameter
+   *            blocks the error term relates to.
+   * @return The residual block ID.
+   */
+  ceres::ResidualBlockId addResidualBlockWithOwnedLoss(
+      std::shared_ptr< ceres::CostFunction> cost_function,
+      std::shared_ptr<ceres::LossFunction> loss_function,
       std::vector<std::shared_ptr<ParameterBlock> >& parameter_block_ptrs);
 
   /**
