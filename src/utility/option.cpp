@@ -877,6 +877,7 @@ void loadOptions<RtkImuCameraRrrEstimatorOptions>(
   LOAD_COMMON(min_yaw_std_init_visual);
   LOAD_COMMON(use_cauchy_loss_for_dd_pseudorange);
   LOAD_COMMON(estimate_reliability_for_dd_pseudorange);
+  LOAD_COMMON(apply_reliability_weight_for_dd_pseudorange);
 }
 
 template <>

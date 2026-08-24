@@ -38,8 +38,11 @@ struct RtkImuCameraRrrEstimatorOptions {
   // Use CauchyLoss(1) only for DD pseudorange factors in this estimator
   bool use_cauchy_loss_for_dd_pseudorange = false;
 
-  // Estimate DD pseudorange reliability without changing factor weights
+  // Estimate and record DD pseudorange reliability before optimization
   bool estimate_reliability_for_dd_pseudorange = false;
+
+  // Apply the estimated reliability as a DD pseudorange factor cost scale
+  bool apply_reliability_weight_for_dd_pseudorange = false;
 };
 
 // Estimator

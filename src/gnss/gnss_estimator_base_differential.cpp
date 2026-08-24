@@ -280,17 +280,22 @@ void GnssEstimatorBase::addDdPseudorangeResidualBlocks(
   int& num_valid_satellite,
   bool use_single_frequency,
   bool use_cauchy_loss_for_dd_pseudorange,
-  bool estimate_reliability_for_dd_pseudorange)
+  bool estimate_reliability_for_dd_pseudorange,
+  bool apply_reliability_weight_for_dd_pseudorange)
 {
   CHECK(!(use_single_frequency && is_verbose_model_));
+  CHECK(!apply_reliability_weight_for_dd_pseudorange ||
+        estimate_reliability_for_dd_pseudorange)
+    << "DD pseudorange reliability weighting requires reliability estimation";
   CHECK(!(use_cauchy_loss_for_dd_pseudorange &&
-          estimate_reliability_for_dd_pseudorange))
-    << "DD pseudorange Cauchy loss and reliability estimation are mutually exclusive";
+          (estimate_reliability_for_dd_pseudorange ||
+           apply_reliability_weight_for_dd_pseudorange)))
+    << "DD pseudorange Cauchy loss and reliability estimation/weighting are mutually exclusive";
   num_valid_satellite = 0;
   const BackendId parameter_id = state.id;
 
-  // Stage 2A shadow mode: estimate and record reliability, but keep the
-  // original Huber(1) loss pointer and optimization cost unchanged.
+  // Estimate and record reliability before factor insertion. Application is
+  // controlled separately so this path supports both Stage 2A and Stage 2B.
   if (estimate_reliability_for_dd_pseudorange) {
     CHECK(!is_verbose_model_);
     CHECK(parameter_id.type() != IdType::gPosition)
@@ -357,8 +362,8 @@ void GnssEstimatorBase::addDdPseudorangeResidualBlocks(
       num_system_used.at(system)++;
     }
 
-    // Estimate factor reliability from same-epoch peer consistency. The
-    // estimated weight is diagnostics-only in Stage 2A; applied_weight stays 1.
+    // Estimate factor reliability from same-epoch peer consistency. In shadow
+    // mode applied_weight stays 1; Stage 2B freezes it to estimated_weight.
     for (const auto& group : group_to_candidates) {
       std::vector<double> valid_residuals;
       for (const size_t index : group.second) {
@@ -405,16 +410,33 @@ void GnssEstimatorBase::addDdPseudorangeResidualBlocks(
             0.1, 9.0 / (metadata.reliability_indicator *
                         metadata.reliability_indicator));
         }
+        metadata.applied_weight =
+          apply_reliability_weight_for_dd_pseudorange ?
+          metadata.estimated_weight : 1.0;
       }
     }
 
     is_state_pose_ = true;
     for (auto& candidate : candidates) {
       candidate.error->setReliabilityMetadata(candidate.metadata);
-      const ceres::ResidualBlockId residual_block_id = graph_->addResidualBlock(
-        candidate.error,
-        huber_loss_function_ ? huber_loss_function_.get() : nullptr,
-        pose_parameter, extrinsics_parameter);
+      ceres::ResidualBlockId residual_block_id;
+      if (apply_reliability_weight_for_dd_pseudorange &&
+          candidate.metadata.applied_weight < 1.0) {
+        std::shared_ptr<ceres::LossFunction> scaled_huber_loss =
+          std::make_shared<ceres::ScaledLoss>(
+            new ceres::HuberLoss(1.0), candidate.metadata.applied_weight,
+            ceres::Ownership::TAKE_OWNERSHIP);
+        std::vector<std::shared_ptr<ParameterBlock>> parameter_blocks = {
+          pose_parameter, extrinsics_parameter};
+        residual_block_id = graph_->addResidualBlockWithOwnedLoss(
+          candidate.error, scaled_huber_loss, parameter_blocks);
+      }
+      else {
+        residual_block_id = graph_->addResidualBlock(
+          candidate.error,
+          huber_loss_function_ ? huber_loss_function_.get() : nullptr,
+          pose_parameter, extrinsics_parameter);
+      }
 
       double graph_residual[1] = {
         std::numeric_limits<double>::quiet_NaN()};

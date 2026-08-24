@@ -220,7 +220,8 @@ protected:
     int& num_valid_satellite,
     bool use_single_frequency = false,
     bool use_cauchy_loss_for_dd_pseudorange = false,
-    bool estimate_reliability_for_dd_pseudorange = false);
+    bool estimate_reliability_for_dd_pseudorange = false,
+    bool apply_reliability_weight_for_dd_pseudorange = false);
 
   // Add phaserange residual blocks to graph
   void addPhaserangeResidualBlocks(

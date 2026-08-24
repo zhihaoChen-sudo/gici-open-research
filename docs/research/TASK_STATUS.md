@@ -1,30 +1,31 @@
 # Current Task Status
 
-Last reconciled: 2026-08-22
+Last reconciled: 2026-08-24
 
 ## Current objective
 
 Develop multi-source reliability-aware fusion without further robust-loss
 replacement. Phase 1 Graph-owned loss infrastructure has been validated and
-accepted. The active worktree implements Stage 2A only: RRR-specific shadow
-estimation and diagnostics for DD pseudorange reliability. It does not apply
-the estimated weight to optimization; `ScaledLoss` integration remains
-reserved for Stage 2B.
+accepted, and Stage 2A shadow reliability estimation has completed runtime
+validation. The active worktree implements the Stage 2B intervention: optionally
+scale only low-reliability RRR DD pseudorange factor costs before their first
+nonlinear solve. Compilation and runtime validation of Stage 2B remain pending.
 
 ---
 
 ## Repository state
 
 - Branch: `exp/pseudorange-firstsolve-huber`
-- HEAD before the current worktree change: `1c7c6fb`
-  (`infra: add owned loss lifecycle support for reliability weighting`)
+- HEAD before the current worktree change: `f03b32a`
+  (`research: add DD pseudorange reliability shadow estimation`)
 - Validated diagnostics baseline tag: `rrr-diagnostics-baseline-v1` at
   `f5c2125`
 - Separate historical experiment branch: `exp/reopt-after-gnss-rejection` at
   `cd42a61`; it is **not** the current branch and its second-optimize code is
   not present in the current worktree.
 
-No final adaptive method, Huber delta change, rejection change, second solve,
+No temporal smoothing, quarantine, multi-source reliability logic, adaptive
+threshold, Huber delta change, rejection change, second solve, solver change,
 or ambiguity change is implemented.
 
 ## Phase 1 final summary: Graph-owned loss infrastructure
@@ -51,7 +52,7 @@ Baseline mathematics is unchanged: existing factor paths continue to use the
 original `addResidualBlock()` API with borrowed loss pointers. Stage 2A also
 does not call the owned-loss API.
 
-## Stage 2A current worktree: reliability estimation only
+## Stage 2A final summary: reliability shadow estimation
 
 A new RRR-only option, `estimate_reliability_for_dd_pseudorange`, defaults to
 `false` and is mutually exclusive with the historical DD pseudorange Cauchy
@@ -73,17 +74,41 @@ the normal pre-opt Graph value, their differences, peer statistics, estimated
 weight, and applied weight. The separate file is not created when the option
 is false, leaving existing diagnostic CSV schemas unchanged.
 
-Stage 2A has not yet been compiled or runtime validated. Required validation:
+Stage 2A runtime validation was reported complete by the user. The estimated
+weight is calibrated to factor-level DD pseudorange post-fit residual/rejection
+abnormality, but a single-epoch reliability score has weak simple ROC/AUPRC
+ability for predicting future trajectory spikes. Stage 2A therefore supports
+a controlled intervention experiment; it must not be described as a trajectory
+spike predictor.
 
-1. compare option=false output files byte-for-byte against the Phase 1
-   baseline under the same build and replay conditions;
-2. verify every successful direct/post-insertion pair agrees within a declared
-   floating-point tolerance and that `direct_minus_preopt_graph` is likewise
-   negligible;
-3. verify every row has `applied_weight=1`, all DD pseudorange losses remain
-   Huber(1), and the new owned-loss API has no caller; and
-4. confirm carrier phase, Doppler, vision, IMU, motion, rejection, AR, solver,
-   and marginalization behavior is unchanged before Stage 2B begins.
+## Stage 2B current worktree: factor-level intervention
+
+An RRR-only option, `apply_reliability_weight_for_dd_pseudorange`, defaults to
+`false` and requires `estimate_reliability_for_dd_pseudorange=true`. The three
+preserved modes are baseline (`false,false`), Stage 2A shadow (`true,false`),
+and Stage 2B method (`true,true`). Cauchy is mutually exclusive with both
+reliability modes.
+
+The Stage 2A indicator and fixed mapping are unchanged. When application is
+enabled and `estimated_weight < 1`, the DD pseudorange factor uses a Graph-owned
+`ScaledLoss(HuberLoss(1), estimated_weight)`. Factors with weight 1 continue to
+use the original shared `HuberLoss(1)` pointer. The implemented objective is
+`0.5 * w_i * rho_Huber(1)(e_i^2)`; residuals, covariance/information, Jacobians,
+Huber delta, and the loss-free rejection residual definition are unchanged.
+The weight is computed once before insertion and frozen in the factor's loss
+for its lifetime.
+
+Diagnostics retain loss-free direct/post-insertion/pre-opt residual semantics.
+The reliability CSV records the actual applied weight, and GNSS residual CSVs
+identify weighted DD pseudorange factors as `loss_type=scaled_huber`. Carrier
+phase and Doppler remain on the shared Huber loss.
+
+Known limitation: a group-wide common-mode DD pseudorange bias can move the
+group median without creating a large within-group deviation. Stage 2B records
+but does not address this limitation.
+
+Stage 2B has been implemented and statically inspected only. It has not been
+compiled, runtime tested, dataset tested, or experimentally validated.
 
 ---
 
@@ -199,19 +224,22 @@ any estimator computation.
 - A 4.1 diagnostic baseline run was completed and jointly analyzed; it
   identified the CSV field-alignment and metadata-row-loss defects.
 - The CSV repair and offline checker were committed in `f5edd11`.
+- Stage 2A shadow-mode runtime validation was reported complete by the user;
+  its weight has factor-level anomaly calibration but weak simple future-spike
+  prediction ability.
 
 ## Validation not yet performed
 
-- Compilation of the CSV diagnostics repair.
-- ROS/RRR runtime execution with the repaired CSV output.
-- Inspection of produced pre-opt/post-fit CSV rows and headers.
-- Verification that a pre/post pair shares the expected residual UID and that
-  all current GNSS measurement factors report `huber,1`.
-- Validation of NaN/zero handling for epochs without a factor type.
-- Timing sanity check against runtime logs.
-- Dataset-level residual/APE/AR analysis or numerical-position comparison.
+- Compilation of the Stage 2B worktree.
+- Runtime verification of baseline/shadow/method option routing.
+- Verification that shadow has `applied_weight=1`, while method has
+  `applied_weight=estimated_weight`.
+- Verification that only weight-below-one DD pseudorange factors report
+  `scaled_huber`, while weight-one DD pseudorange, carrier phase, and Doppler
+  report `huber`.
+- Stage 2B timing, trajectory-tail, rejection, AR, and cross-dataset analysis.
 
-Do not describe this committed work as compiled, runtime tested, or
+Do not describe Stage 2B as compiled, runtime tested, dataset tested, or
 experimentally validated.
 
 ---
@@ -265,42 +293,24 @@ experimentally validated.
 
 ## Current algorithm hypothesis and implementation
 
-The current, unvalidated hypothesis recorded in
-`docs/research/ALGORITHM_DECISION.md` is that persistent DD-pseudorange gross
-inconsistency entering the first nonlinear solve is the dominant unresolved
-failure mode. The document names a DD-pseudorange-only redescending robust
-loss as its first candidate and keeps all other factor classes and the AR
-pipeline unchanged.
+Stage 2B is an intervention experiment, not a trajectory-spike prediction
+experiment. Its hypothesis is that reducing an already identified abnormal DD
+pseudorange factor's contribution before the first nonlinear solve can reduce
+subsequent state corruption and the trajectory-error tail while preserving
+normal RTK behavior.
 
-The controlled Cauchy(1) mechanism is implemented behind an RRR-only,
-default-false option. This is still a research hypothesis, not a validated
-causal conclusion or final adaptive method. The existing negative findings
-above remain in force.
+The intervention changes only the outer factor cost scale. It does not replace
+Huber, change the DD pseudorange residual model, or modify any other factor,
+rejection, AR, solver, or marginalization flow.
 
 ## Next experimental plan
 
-First compile and run the committed diagnostics baseline in the user's
-known-working ROS environment. For the repaired output, run one unchanged RRR
-configuration with intermediate logging enabled, then use
-`python3 tools/check_gnss_residual_csv.py <preopt.csv> <postfit.csv>` and
-inspect a short time window to verify:
-
-1. both GNSS CSVs are created with the documented header;
-2. pre-opt and post-fit rows share `residual_uid` within a run;
-3. DD pseudorange, DD carrier phase, and Doppler all report actual
-   `huber,1` loss diagnostics and finite `rho0/rho1/rho2`;
-4. absent factor types produce `NaN,0,0` in the corresponding epoch summary;
-5. `first_optimize_ms`, rejection, AR, and epoch timings are plausible and
-   no diagnostic warning causes an abort; and
-6. enabling diagnostics does not alter the output trajectory versus the same
-   configuration without diagnostics, within normal deterministic/replay
-   expectations.
-
-Then compare the same build and configuration with
-`use_cauchy_loss_for_dd_pseudorange=false` and `true`. Verify that false logs
-Huber(1) for all GNSS factors, while true logs Cauchy(1) only for DD
-pseudorange and Huber(1) for DD carrier phase and Doppler. Do not combine
-mechanisms or alter Vision, IMU, Motion, rejection, solver, or AR behavior.
+Compile once in the user's container environment, then run baseline, Stage 2A
+shadow, and Stage 2B method with the same data and otherwise identical
+configuration. First validate option/loss routing and residual invariants;
+then compare trajectory-tail, rejection, AR, solver, and timing outcomes. Do
+not tune the indicator threshold, weight floor, or scale on the evaluation
+dataset, and do not add another reliability mechanism to this experiment.
 
 ---
 
@@ -313,10 +323,12 @@ mechanisms or alter Vision, IMU, Motion, rejection, solver, or AR behavior.
 - [x] GNSS CSV repair and offline field-count checker committed at `f5edd11`
 - [x] RRR-only, default-false DD pseudorange Cauchy(1) option implemented
 - [x] diagnostics distinguish Huber and Cauchy loss pointers
-- [ ] compilation of the committed diagnostics baseline
-- [ ] compilation of the controlled Cauchy experiment
-- [ ] runtime execution and CSV inspection
-- [ ] timing sanity check
-- [ ] numerical/trajectory comparison
-- [ ] controlled single-candidate algorithm experiment
-- [ ] dataset-level failure attribution and experimental conclusion
+- [x] Phase 1 Graph-owned loss infrastructure accepted
+- [x] Stage 2A shadow reliability implementation and user-run validation
+- [x] Stage 2B factor-level weighting implemented in the current worktree
+- [x] current `git diff --check`
+- [ ] Stage 2B compilation
+- [ ] baseline/shadow/method runtime execution and CSV inspection
+- [ ] Stage 2B timing sanity check
+- [ ] trajectory-tail and normal-RTK comparison
+- [ ] cross-dataset Stage 2B experimental conclusion

@@ -15,6 +15,7 @@
 #include "gici/gnss/gnss_parameter_blocks.h"
 #include "gici/gnss/code_phase_maps.h"
 #include "gici/gnss/pseudorange_error.h"
+#include "gici/gnss/pseudorange_error_dd.h"
 #include "gici/gnss/phaserange_error.h"
 
 namespace gici {
@@ -553,6 +554,21 @@ void GnssEstimatorBase::logGnssResidualDiagnostics(
         loss_type = "cauchy";
         // Must match EstimatorBase's shared CauchyLoss(1) construction.
         loss_delta = 1.0;
+      }
+      else if (type == ErrorType::kPseudorangeErrorDD &&
+               dynamic_cast<ceres::ScaledLoss*>(
+                 residual_block.loss_function_ptr) != nullptr) {
+        const auto pseudorange_error =
+          std::dynamic_pointer_cast<PseudorangeErrorDD<7, 3>>(interface);
+        if (pseudorange_error &&
+            pseudorange_error->reliabilityMetadata().enabled &&
+            pseudorange_error->reliabilityMetadata().applied_weight < 1.0) {
+          loss_type = "scaled_huber";
+          loss_delta = 1.0;
+        }
+        else {
+          loss_type = "other";
+        }
       }
       else loss_type = "other";
     }

@@ -99,9 +99,13 @@ RtkImuCameraRrrEstimator::RtkImuCameraRrrEstimator(
   EstimatorBase(base_options)
 {
   type_ = EstimatorType::RtkImuCameraRrr;
+  CHECK(!rrr_options_.apply_reliability_weight_for_dd_pseudorange ||
+        rrr_options_.estimate_reliability_for_dd_pseudorange)
+    << "DD pseudorange reliability weighting requires reliability estimation";
   CHECK(!(rrr_options_.use_cauchy_loss_for_dd_pseudorange &&
-          rrr_options_.estimate_reliability_for_dd_pseudorange))
-    << "DD pseudorange Cauchy loss and reliability estimation are mutually exclusive";
+          (rrr_options_.estimate_reliability_for_dd_pseudorange ||
+           rrr_options_.apply_reliability_weight_for_dd_pseudorange)))
+    << "DD pseudorange Cauchy loss and reliability estimation/weighting are mutually exclusive";
   is_use_phase_ = true;
   states_.push_back(State());
   gnss_measurement_pairs_.push_back(
@@ -638,7 +642,8 @@ bool RtkImuCameraRrrEstimator::addGnssMeasurementAndState(
   addDdPseudorangeResidualBlocks(curGnssRov(), 
     curGnssRef(), code_index_pairs, states_[index], num_valid_satellite, false,
     rrr_options_.use_cauchy_loss_for_dd_pseudorange,
-    rrr_options_.estimate_reliability_for_dd_pseudorange);
+    rrr_options_.estimate_reliability_for_dd_pseudorange,
+    rrr_options_.apply_reliability_weight_for_dd_pseudorange);
   
   // We do not need to check if the number of satellites is sufficient in tightly fusion.
   if (!checkSufficientSatellite(num_valid_satellite, 0)) {
