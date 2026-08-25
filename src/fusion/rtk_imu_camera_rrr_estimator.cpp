@@ -52,6 +52,19 @@ double durationMilliseconds(const std::chrono::steady_clock::duration& duration)
   return std::chrono::duration<double, std::milli>(duration).count();
 }
 
+void appendGnssResidualPopulationEvidence(
+  std::ofstream& logger, const GnssResidualPopulationEvidence& evidence)
+{
+  logger << evidence.evaluation_attempt_count << ","
+    << evidence.finite_success_count << ","
+    << evidence.evaluation_failure_count << ","
+    << evidence.median_abs_normalized << ","
+    << evidence.p90_abs_normalized << ","
+    << evidence.max_abs_normalized << ","
+    << evidence.fraction_gt3 << ","
+    << evidence.fraction_gt5 << ",";
+}
+
 std::set<uint64_t> collectGnssResidualIds(
   const std::shared_ptr<Graph>& graph, const State& state, const ErrorType type)
 {
@@ -151,6 +164,7 @@ RtkImuCameraRrrEstimator::~RtkImuCameraRrrEstimator()
   gnss_rejection_events_logger_.close();
   rrr_epoch_diagnostics_logger_.close();
   dd_pseudorange_reliability_diagnostics_logger_.close();
+  gnss_source_reliability_evidence_logger_.close();
 }
 
 void RtkImuCameraRrrEstimator::createDiagnosticLoggers()
@@ -202,6 +216,71 @@ void RtkImuCameraRrrEstimator::createDiagnosticLoggers()
       "direct_minus_preopt_graph,peer_count,peer_median,peer_scale,"
       "reliability_indicator,estimated_weight,applied_weight");
   }
+  if (rrr_options_.estimate_gnss_source_reliability) {
+    createDiagnosticLogger(
+      gnss_source_reliability_evidence_logger_, directory,
+      "gnss_source_reliability_evidence",
+      "timestamp,"
+      "pr_evaluation_attempt_count,pr_finite_success_count,pr_evaluation_failure_count,"
+      "pr_median_abs_normalized,pr_p90_abs_normalized,pr_max_abs_normalized,"
+      "pr_fraction_gt3,pr_fraction_gt5,"
+      "phase_evaluation_attempt_count,phase_finite_success_count,phase_evaluation_failure_count,"
+      "phase_median_abs_normalized,phase_p90_abs_normalized,phase_max_abs_normalized,"
+      "phase_fraction_gt3,phase_fraction_gt5,"
+      "doppler_evaluation_attempt_count,doppler_finite_success_count,"
+      "doppler_evaluation_failure_count,doppler_median_abs_normalized,"
+      "doppler_p90_abs_normalized,doppler_max_abs_normalized,"
+      "doppler_fraction_gt3,doppler_fraction_gt5,"
+      "pr_group_count,pr_group_eligible_count,pr_group_insufficient_count,"
+      "pr_factor_count,pr_factor_eligible_count,pr_factor_insufficient_count,"
+      "pr_eligible_group_ratio,pr_eligible_factor_ratio,"
+      "pr_insufficient_group_ratio,pr_insufficient_factor_ratio,"
+      "pr_group_shift_all_p50,pr_group_shift_all_p90,pr_group_shift_all_max,"
+      "pr_group_shift_eligible_p50,pr_group_shift_eligible_p90,"
+      "pr_group_shift_eligible_max,pr_group_scale_eligible_p50,"
+      "pr_group_scale_eligible_p90,pr_group_scale_eligible_max,"
+      "unique_used_satellite_count,gdop,gdop_valid,"
+      "snr_sample_count,snr_valid,snr_p10,snr_median,"
+      "elevation_sample_count,elevation_valid,elevation_p10_deg,"
+      "elevation_median_deg");
+  }
+}
+
+void RtkImuCameraRrrEstimator::logGnssSourceReliabilityEvidence(
+  const GnssSourceReliabilityEvidence& evidence)
+{
+  if (!gnss_source_reliability_evidence_logger_.is_open() ||
+      !evidence.computed) return;
+
+  const GnssDdPseudorangeGroupEvidence& groups =
+    evidence.pseudorange_groups;
+  gnss_source_reliability_evidence_logger_ << std::setprecision(15)
+    << evidence.timestamp << ",";
+  appendGnssResidualPopulationEvidence(
+    gnss_source_reliability_evidence_logger_, evidence.pseudorange);
+  appendGnssResidualPopulationEvidence(
+    gnss_source_reliability_evidence_logger_, evidence.phaserange);
+  appendGnssResidualPopulationEvidence(
+    gnss_source_reliability_evidence_logger_, evidence.doppler);
+  gnss_source_reliability_evidence_logger_
+    << groups.group_count << "," << groups.eligible_group_count << ","
+    << groups.insufficient_group_count << "," << groups.factor_count << ","
+    << groups.eligible_factor_count << ","
+    << groups.insufficient_factor_count << ","
+    << groups.eligible_group_ratio << "," << groups.eligible_factor_ratio << ","
+    << groups.insufficient_group_ratio << ","
+    << groups.insufficient_factor_ratio << ","
+    << groups.shift_all_p50 << "," << groups.shift_all_p90 << ","
+    << groups.shift_all_max << "," << groups.shift_eligible_p50 << ","
+    << groups.shift_eligible_p90 << "," << groups.shift_eligible_max << ","
+    << groups.scale_eligible_p50 << "," << groups.scale_eligible_p90 << ","
+    << groups.scale_eligible_max << ","
+    << evidence.unique_used_satellite_count << "," << evidence.gdop << ","
+    << evidence.gdop_valid << "," << evidence.snr_sample_count << ","
+    << evidence.snr_valid << "," << evidence.snr_p10 << ","
+    << evidence.snr_median << "," << evidence.elevation_sample_count << ","
+    << evidence.elevation_valid << "," << evidence.elevation_p10_deg << ","
+    << evidence.elevation_median_deg << '\n';
 }
 
 void RtkImuCameraRrrEstimator::logDdPseudorangeReliabilityDiagnostics(
@@ -815,8 +894,23 @@ bool RtkImuCameraRrrEstimator::estimate()
 {
   status_ = EstimatorStatus::Converged;
 
+  const bool is_gnss_state =
+    states_[latest_state_index_].id.type() == IdType::gPose;
+  if (rrr_options_.estimate_gnss_source_reliability && is_gnss_state) {
+    // Stage 3A.0 shadow evidence: loss-free normalized inconsistency between
+    // the predicted multi-sensor state and current GNSS observations. This is
+    // deliberately computed before the first optimize() and outside the
+    // log_intermediate_data gate.
+    gnss_source_reliability_evidence_ =
+      computeGnssSourceReliabilityEvidence(
+        graph_, states_[latest_state_index_], curGnssRov(), gdop_);
+    if (base_options_.log_intermediate_data) {
+      logGnssSourceReliabilityEvidence(gnss_source_reliability_evidence_);
+    }
+  }
+
   if (base_options_.log_intermediate_data &&
-      states_[latest_state_index_].id.type() == IdType::gPose) {
+      is_gnss_state) {
     logGnssPreoptResidualDiagnostics(
       states_[latest_state_index_], curGnssRov(), curGnssRef());
     if (rrr_options_.estimate_reliability_for_dd_pseudorange) {

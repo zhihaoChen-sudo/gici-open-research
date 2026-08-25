@@ -1,32 +1,38 @@
 # Current Task Status
 
-Last reconciled: 2026-08-24
+Last reconciled: 2026-08-25
 
 ## Current objective
 
-Develop multi-source reliability-aware fusion without further robust-loss
-replacement. Phase 1 Graph-owned loss infrastructure has been validated and
-accepted, and Stage 2A shadow reliability estimation has completed runtime
-validation. The active worktree implements the Stage 2B intervention: optionally
-scale only low-reliability RRR DD pseudorange factor costs before their first
-nonlinear solve. Compilation and runtime validation of Stage 2B remain pending.
+Develop a generalizable multi-source reliability-aware fusion framework without
+further robust-loss replacement. Stage 2B has completed its factor-level
+feasibility study. The active worktree implements Stage 3A.0, a shadow-only
+GNSS source reliability evidence extractor that runs before the first nonlinear
+solve and does not change optimization behavior.
 
 ---
 
 ## Repository state
 
 - Branch: `exp/pseudorange-firstsolve-huber`
-- HEAD before the current worktree change: `f03b32a`
-  (`research: add DD pseudorange reliability shadow estimation`)
+- HEAD before the current Stage 3A.0 worktree change: `eb2c545`
+  (`research: apply DD pseudorange reliability-aware factor weighting`)
 - Validated diagnostics baseline tag: `rrr-diagnostics-baseline-v1` at
   `f5c2125`
 - Separate historical experiment branch: `exp/reopt-after-gnss-rejection` at
   `cd42a61`; it is **not** the current branch and its second-optimize code is
   not present in the current worktree.
 
-No temporal smoothing, quarantine, multi-source reliability logic, adaptive
-threshold, Huber delta change, rejection change, second solve, solver change,
-or ambiguity change is implemented.
+The user-provided `docs/research/GENERALIZATION_CONTRACT.md` is now a hard
+constraint for subsequent design: no online GT/EVO/APE, event-time, location,
+route, satellite-ID, or dataset-identity logic; evidence used by the first solve
+must be available before that solve; and mechanisms/parameters must eventually
+be frozen for external sequence/dataset validation.
+
+No final GNSS reliability/confidence formula, source weighting, covariance
+adaptation, temporal trust, quarantine, Vision/IMU reliability, cross-source
+weighting, adaptive threshold, second solve, solver change, or ambiguity change
+is implemented by Stage 3A.0.
 
 ## Phase 1 final summary: Graph-owned loss infrastructure
 
@@ -81,7 +87,7 @@ ability for predicting future trajectory spikes. Stage 2A therefore supports
 a controlled intervention experiment; it must not be described as a trajectory
 spike predictor.
 
-## Stage 2B current worktree: factor-level intervention
+## Stage 2B final experimental summary: factor-level feasibility
 
 An RRR-only option, `apply_reliability_weight_for_dd_pseudorange`, defaults to
 `false` and requires `estimate_reliability_for_dd_pseudorange=true`. The three
@@ -107,8 +113,39 @@ Known limitation: a group-wide common-mode DD pseudorange bias can move the
 group median without creating a large within-group deviation. Stage 2B records
 but does not address this limitation.
 
-Stage 2B has been implemented and statically inspected only. It has not been
-compiled, runtime tested, dataset tested, or experimentally validated.
+Repeated B1/M1, B2/M2, and B3/M3 experiments were reported complete by the
+user. The factor-level reliability estimate behaved stably, low-reliability DD
+pseudorange factors were downweighted before their first solve, and runtime had
+no obvious degradation. However, trajectory-tail improvement was not repeatable
+across the three comparisons. Stage 2B therefore establishes factor-level
+intervention feasibility, but it is insufficient evidence for system-level or
+cross-dataset robustness. Its mathematics and parameters are frozen.
+
+## Stage 3A.0 current worktree: GNSS source evidence shadow
+
+The RRR-only option `estimate_gnss_source_reliability` defaults to `false`.
+When enabled, a logger-independent computation enumerates current DD
+pseudorange, DD carrier-phase, and Doppler factors immediately before the first
+`optimize()`, evaluates their loss-free normalized residuals, and produces
+population, DD-pseudorange group shift/scale, insufficiency, used-satellite,
+GDOP, and elevation evidence. The semantics are normalized inconsistency
+between the predicted multi-sensor state and the current GNSS observations,
+not pure GNSS measurement error.
+
+DD pseudorange groups use the exact arranged construction indexes independently
+of the Stage 2 options. All groups with finite evidence contribute group-shift
+statistics, while MAD scale and separate eligible-shift statistics require at
+least four finite factors. Insufficient groups/factors and their ratios remain
+explicit evidence. Empty distributions and unavailable metadata are NaN rather
+than healthy zeros. SNR remains explicitly invalid in the first version because
+the complete source-wide arranged observation association and unit semantics
+have not been established.
+
+The evidence can be computed with `log_intermediate_data=false`; CSV logging is
+only an optional consumer. No evidence is applied to the Graph, residuals,
+losses, covariance, rejection, AR, solver, marginalization, Vision, IMU, or
+Motion. Stage 3A.0 has not been compiled, runtime tested, dataset tested, or
+experimentally validated.
 
 ---
 
@@ -227,19 +264,22 @@ any estimator computation.
 - Stage 2A shadow-mode runtime validation was reported complete by the user;
   its weight has factor-level anomaly calibration but weak simple future-spike
   prediction ability.
+- Stage 2B B1/M1, B2/M2, and B3/M3 runtime experiments were reported complete
+  by the user. Factor-level behavior was stable, but trajectory-tail benefit was
+  not repeatable.
+- Stage 3A.0 implementation has undergone source-level/static review only.
 
 ## Validation not yet performed
 
-- Compilation of the Stage 2B worktree.
-- Runtime verification of baseline/shadow/method option routing.
-- Verification that shadow has `applied_weight=1`, while method has
-  `applied_weight=estimated_weight`.
-- Verification that only weight-below-one DD pseudorange factors report
-  `scaled_huber`, while weight-one DD pseudorange, carrier phase, and Doppler
-  report `huber`.
-- Stage 2B timing, trajectory-tail, rejection, AR, and cross-dataset analysis.
+- Compilation of the Stage 3A.0 worktree.
+- Runtime verification that option=false reproduces the frozen Stage 2B code
+  path and option=true changes only evidence computation/logging.
+- CSV schema/row-count, finite/failure accounting, NaN, ratio, exact grouping,
+  GDOP-validity, and elevation-validity checks.
+- Runtime cost of source evidence with logging disabled and enabled.
+- Cross-sequence/dataset calibration of the recorded evidence distributions.
 
-Do not describe Stage 2B as compiled, runtime tested, dataset tested, or
+Do not describe Stage 3A.0 as compiled, runtime tested, dataset tested, or
 experimentally validated.
 
 ---
@@ -291,26 +331,27 @@ experimentally validated.
 
 ---
 
-## Current algorithm hypothesis and implementation
+## Current research hypothesis and implementation
 
-Stage 2B is an intervention experiment, not a trajectory-spike prediction
-experiment. Its hypothesis is that reducing an already identified abnormal DD
-pseudorange factor's contribution before the first nonlinear solve can reduce
-subsequent state corruption and the trajectory-error tail while preserving
-normal RTK behavior.
+Stage 2B showed that factor-local DD pseudorange reliability can be estimated
+and applied before the first solve, but the resulting trajectory-tail benefit
+was not repeatable. The current hypothesis is therefore narrower: population
+inconsistency, group/common shift, group dispersion, geometry, and evidence
+sufficiency may provide a more complete and generalizable description of GNSS
+source reliability than a single DD-pseudorange factor-local score.
 
-The intervention changes only the outer factor cost scale. It does not replace
-Huber, change the DD pseudorange residual model, or modify any other factor,
-rejection, AR, solver, or marginalization flow.
+Stage 3A.0 only records those quantities. It does not claim that they form a
+validated GNSS source reliability estimator and does not define or apply a
+source reliability/confidence value.
 
 ## Next experimental plan
 
-Compile once in the user's container environment, then run baseline, Stage 2A
-shadow, and Stage 2B method with the same data and otherwise identical
-configuration. First validate option/loss routing and residual invariants;
-then compare trajectory-tail, rejection, AR, solver, and timing outcomes. Do
-not tune the indicator threshold, weight floor, or scale on the evaluation
-dataset, and do not add another reliability mechanism to this experiment.
+Compile Stage 3A.0 in the user's container, then compare identical runs with
+`estimate_gnss_source_reliability=false/true`. First verify optimization,
+rejection, AR, and trajectory invariance and validate the evidence CSV schema.
+Then perform offline normal/failure-window inspection under the Generalization
+Contract. Do not construct `R_G`, `C_G`, source weights, temporal logic, or
+cross-source trust until the shadow evidence has been evaluated.
 
 ---
 
@@ -325,10 +366,14 @@ dataset, and do not add another reliability mechanism to this experiment.
 - [x] diagnostics distinguish Huber and Cauchy loss pointers
 - [x] Phase 1 Graph-owned loss infrastructure accepted
 - [x] Stage 2A shadow reliability implementation and user-run validation
-- [x] Stage 2B factor-level weighting implemented in the current worktree
+- [x] Stage 2B factor-level weighting implemented at `eb2c545`
+- [x] Stage 2B B1/M1 through B3/M3 experiments reported complete
+- [x] Stage 2B classified as a factor-level feasibility study
+- [x] Generalization Contract adopted as a hard design constraint
+- [x] Stage 3A.0 shadow evidence implemented in the current worktree
 - [x] current `git diff --check`
-- [ ] Stage 2B compilation
-- [ ] baseline/shadow/method runtime execution and CSV inspection
-- [ ] Stage 2B timing sanity check
-- [ ] trajectory-tail and normal-RTK comparison
-- [ ] cross-dataset Stage 2B experimental conclusion
+- [ ] Stage 3A.0 compilation
+- [ ] Stage 3A.0 option=false/true invariance run
+- [ ] Stage 3A.0 evidence CSV sanity and timing checks
+- [ ] Stage 3A.0 offline evidence assessment
+- [ ] cross-dataset evidence calibration/validation

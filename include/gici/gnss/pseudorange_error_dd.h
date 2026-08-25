@@ -121,6 +121,13 @@ public:
     return reliability_metadata_;
   }
 
+  // Get the arranged measurement indexes supplied to the constructor. This is
+  // intentionally separate from getGnssMeasurementIndex(), which preserves
+  // its existing raw-code semantics.
+  const GnssMeasurementDDIndexPair& constructionArrangedMeasurementIndex() const {
+    return construction_arranged_measurement_index_;
+  }
+
   // error term and Jacobian implementation
   /**
     * @brief This evaluates the error term and additionally computes the Jacobians.
@@ -186,6 +193,10 @@ protected:
             satellite_rov_base_, satellite_ref_base_;
   Observation observation_rov_, observation_ref_,
               observation_rov_base_, observation_ref_base_;
+
+  // Read-only construction metadata. It is not used by Evaluate(), the
+  // Jacobians, or the information model.
+  GnssMeasurementDDIndexPair construction_arranged_measurement_index_;
 
   // weighting related
   GnssErrorParameter error_parameter_;

@@ -126,6 +126,7 @@ estimate:
       use_cauchy_loss_for_dd_pseudorange: false
       estimate_reliability_for_dd_pseudorange: false
       apply_reliability_weight_for_dd_pseudorange: false
+      estimate_gnss_source_reliability: false
     rtk_options:
       use_ambiguity_resolution: true
     gnss_estimator_base_options:

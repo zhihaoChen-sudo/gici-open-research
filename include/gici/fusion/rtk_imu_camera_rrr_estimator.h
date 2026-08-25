@@ -12,6 +12,7 @@
 #include <set>
 
 #include "gici/gnss/gnss_estimator_base.h"
+#include "gici/gnss/gnss_source_reliability.h"
 #include "gici/imu/imu_estimator_base.h"
 #include "gici/vision/visual_estimator_base.h"
 #include "gici/gnss/rtk_estimator.h"
@@ -43,6 +44,10 @@ struct RtkImuCameraRrrEstimatorOptions {
 
   // Apply the estimated reliability as a DD pseudorange factor cost scale
   bool apply_reliability_weight_for_dd_pseudorange = false;
+
+  // Estimate GNSS source reliability evidence before the first solve. Stage
+  // 3A.0 is shadow-only and never applies this evidence to optimization.
+  bool estimate_gnss_source_reliability = false;
 };
 
 // Estimator
@@ -107,6 +112,8 @@ protected:
 
   // Log diagnostics
   void logDdPseudorangeReliabilityDiagnostics(const State& state);
+  void logGnssSourceReliabilityEvidence(
+    const GnssSourceReliabilityEvidence& evidence);
   void logVisualResidualDiagnostics(const State& state, const FramePtr& frame);
   void logImuResidualDiagnostics(const State& state);
   void logMotionConstraintDiagnostics(const State& state);
@@ -160,6 +167,11 @@ protected:
   int num_cotinuous_reject_gnss_ = 0;
   int num_cotinuous_reject_visual_ = 0;
 
+  // Latest read-only first-solve-before GNSS source evidence. Computation is
+  // independent of diagnostic logging so future consumers can use it when
+  // log_intermediate_data is disabled.
+  GnssSourceReliabilityEvidence gnss_source_reliability_evidence_;
+
   // Diagnostic loggers
   std::ofstream visual_residual_diagnostics_logger_;
   std::ofstream imu_residual_diagnostics_logger_;
@@ -167,6 +179,7 @@ protected:
   std::ofstream gnss_rejection_events_logger_;
   std::ofstream rrr_epoch_diagnostics_logger_;
   std::ofstream dd_pseudorange_reliability_diagnostics_logger_;
+  std::ofstream gnss_source_reliability_evidence_logger_;
 };
 
 }
