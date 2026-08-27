@@ -1,12 +1,12 @@
 # Current Task Status
 
-Last reconciled: 2026-08-26
+Last reconciled: 2026-08-27
 
 ## Current objective
 
 Develop a generalizable multi-source reliability-aware fusion framework without
 further robust-loss replacement. Stage 3A.0 repeatability validation has passed
-and is frozen. The active worktree implements Stage 3A.1a, a first-solve-before
+and is frozen. The current HEAD implements Stage 3A.1a, a first-solve-before
 conditional GNSS evidence shadow that separates carrier-phase ambiguity
 provenance and per-system Doppler evidence without changing optimization.
 
@@ -15,7 +15,10 @@ provenance and per-system Doppler evidence without changing optimization.
 ## Repository state
 
 - Branch: `exp/pseudorange-firstsolve-huber`
-- HEAD before the current Stage 3A.1a worktree change: `944ab6c`
+- HEAD: `0a732d6` (`fix: correct ambiguity provenance result type`)
+- Stage 3A.1a implementation: `2e25400`
+  (`research: add conditional GNSS reliability evidence shadow`)
+- Stage 3A.0 implementation: `944ab6c`
   (`research: add GNSS source reliability evidence shadow`)
 - Validated diagnostics baseline tag: `rrr-diagnostics-baseline-v1` at
   `f5c2125`
@@ -161,7 +164,7 @@ whether each ambiguity value is a current phase-code initializer or a value
 copied through an actual relative-ambiguity connection. Raw phase evidence is
 therefore conditional inconsistency, not pure carrier-phase source quality.
 
-## Stage 3A.1a current worktree: conditional GNSS evidence shadow
+## Stage 3A.1a current HEAD: conditional GNSS evidence shadow
 
 Stage 3A.1a reuses `estimate_gnss_source_reliability`; no new option or apply
 path is added. It records only first-solve-before shadow evidence:
@@ -185,10 +188,13 @@ path is added. It records only first-solve-before shadow evidence:
   receiver-frequency cancellation.
 
 The implementation adds no `R_G`, `C_G`, source weighting, temporal trust,
-nuisance projection, or optimizer intervention. Stage 3A.1a has only been
-implemented and statically reviewed in this worktree; compilation, runtime
-invariance, CSV inspection, repeatability, and dataset validation remain
-pending in the user's container.
+nuisance projection, or optimizer intervention. The first user-side compile
+attempt found that two variables receiving
+`inspectAmbiguityValueProvenance()` were declared as the enum rather than its
+actual `AmbiguityValueProvenanceResult` return type. Commit `0a732d6` applies
+only that declaration correction. Successful compilation after the fix,
+runtime invariance, CSV inspection, repeatability, and dataset validation
+remain pending in the user's container.
 
 ---
 
@@ -314,10 +320,13 @@ any estimator computation.
   the PR/group/insufficiency/GDOP evidence was highly repeatable, while raw
   carrier-phase evidence showed material ambiguity/solver-path coupling.
 - Stage 3A.1a implementation has undergone source-level/static review only.
+- The first Stage 3A.1a compile attempt failed on an ambiguity-provenance
+  return-type mismatch; the minimal correction is committed at `0a732d6`, but
+  no successful recompilation has yet been reported.
 
 ## Validation not yet performed
 
-- Compilation of the Stage 3A.1a worktree.
+- Successful compilation of Stage 3A.1a after commit `0a732d6`.
 - Runtime verification that Stage 3A.1a changes only shadow
   computation/logging and leaves trajectory, solver, rejection, and AR outputs
   invariant under otherwise identical configuration.
@@ -389,13 +398,16 @@ estimator and does not define or apply reliability/confidence values.
 
 ## Next experimental plan
 
-Compile Stage 3A.1a in the user's container and run otherwise identical shadow
-repeats with `estimate_gnss_source_reliability=true`. Validate categorical
-accounting, exact ambiguity-value provenance, transition-innovation units,
-per-system Doppler rows, and optimizer invariance. Then compare conditional
-evidence repeatability across E0/E1/E2 and external sequences. Do not construct
-`R_G`, `C_G`, source weights, temporal logic, or cross-source trust until this
-shadow evidence has been evaluated.
+Compile Stage 3A.1a in the user's container. After a successful build, run
+`OFF -> C0 -> C1 -> C2`: OFF sets
+`estimate_gnss_source_reliability=false`; C0/C1/C2 set it to `true`; all runs
+otherwise share the same code, binary, dataset, YAML, and solver settings.
+Validate categorical accounting, exact ambiguity-value provenance,
+transition-innovation units, per-system Doppler rows, optimizer invariance,
+and conditional-evidence repeatability. Epochs 135/165/213/219 are offline
+mechanism-analysis windows only, and APE improvement is not a Stage 3A.1a PASS
+criterion. Do not construct `R_G`, `C_G`, source weights, temporal logic, or
+cross-source trust until this shadow evidence has been evaluated.
 
 ---
 
@@ -416,9 +428,10 @@ shadow evidence has been evaluated.
 - [x] Generalization Contract adopted as a hard design constraint
 - [x] Stage 3A.0 shadow evidence implemented at `944ab6c`
 - [x] Stage 3A.0 E0/E1/E2 repeatability validation reported PASS
-- [x] Stage 3A.1a conditional evidence shadow implemented in the worktree
+- [x] Stage 3A.1a conditional evidence shadow implemented at `2e25400`
+- [x] ambiguity-provenance result-type compile fix committed at `0a732d6`
 - [x] current `git diff --check`
-- [ ] Stage 3A.1a compilation
+- [ ] successful Stage 3A.1a compilation after `0a732d6`
 - [ ] Stage 3A.1a optimizer-invariance run
 - [ ] Stage 3A.1a conditional evidence CSV sanity checks
 - [ ] Stage 3A.1a repeatability assessment

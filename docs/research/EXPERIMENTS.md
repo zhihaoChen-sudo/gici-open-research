@@ -139,9 +139,13 @@ is conditional evidence shadowing, not `R_G`/`C_G` construction or weighting.
 
 ### Status
 
-Implemented in the current worktree and statically reviewed only. It has not
-been compiled, runtime tested, repeatability tested, dataset tested, or
-experimentally validated.
+Implemented at `2e25400` and statically reviewed. The first user-side compile
+attempt exposed a local declaration mismatch: `inspectAmbiguityValueProvenance()`
+returns `AmbiguityValueProvenanceResult`, but two callers declared the returned
+objects as `AmbiguityValueProvenance`. Commit `0a732d6` applies the minimal
+type-only correction. A successful rebuild after that fix, runtime testing,
+repeatability testing, dataset testing, and experimental validation are still
+pending.
 
 ### Objective
 
@@ -196,11 +200,13 @@ in Stage 3A.1a.
 
 ### Required validation
 
-Compile and run in the user's container. Check option=false behavior, shadow
-optimizer invariance, categorical count/ratio closure, continuity-conditioned
-finite counts, transition units, per-system Doppler aggregation, and CSV field
-alignment. Repeat the shadow run before considering Stage 3A.1b or any final
-`R_G`/`C_G` design.
+Recompile in the user's container, then run `OFF -> C0 -> C1 -> C2` with one
+unchanged binary, dataset, and solver configuration. Check option=false
+behavior, shadow optimizer invariance, categorical count/ratio closure,
+continuity-conditioned finite counts, transition units, per-system Doppler
+aggregation, and CSV field alignment. Compare raw and conditioned phase,
+provenance, and Doppler evidence repeatability before considering Stage 3A.1b
+or any final `R_G`/`C_G` design. APE improvement is not a PASS criterion.
 
 ## EXP-001
 
