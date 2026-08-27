@@ -1,22 +1,22 @@
 # Current Task Status
 
-Last reconciled: 2026-08-25
+Last reconciled: 2026-08-26
 
 ## Current objective
 
 Develop a generalizable multi-source reliability-aware fusion framework without
-further robust-loss replacement. Stage 2B has completed its factor-level
-feasibility study. The active worktree implements Stage 3A.0, a shadow-only
-GNSS source reliability evidence extractor that runs before the first nonlinear
-solve and does not change optimization behavior.
+further robust-loss replacement. Stage 3A.0 repeatability validation has passed
+and is frozen. The active worktree implements Stage 3A.1a, a first-solve-before
+conditional GNSS evidence shadow that separates carrier-phase ambiguity
+provenance and per-system Doppler evidence without changing optimization.
 
 ---
 
 ## Repository state
 
 - Branch: `exp/pseudorange-firstsolve-huber`
-- HEAD before the current Stage 3A.0 worktree change: `eb2c545`
-  (`research: apply DD pseudorange reliability-aware factor weighting`)
+- HEAD before the current Stage 3A.1a worktree change: `944ab6c`
+  (`research: add GNSS source reliability evidence shadow`)
 - Validated diagnostics baseline tag: `rrr-diagnostics-baseline-v1` at
   `f5c2125`
 - Separate historical experiment branch: `exp/reopt-after-gnss-rejection` at
@@ -32,7 +32,7 @@ be frozen for external sequence/dataset validation.
 No final GNSS reliability/confidence formula, source weighting, covariance
 adaptation, temporal trust, quarantine, Vision/IMU reliability, cross-source
 weighting, adaptive threshold, second solve, solver change, or ambiguity change
-is implemented by Stage 3A.0.
+is implemented by Stage 3A.1a.
 
 ## Phase 1 final summary: Graph-owned loss infrastructure
 
@@ -121,7 +121,7 @@ across the three comparisons. Stage 2B therefore establishes factor-level
 intervention feasibility, but it is insufficient evidence for system-level or
 cross-dataset robustness. Its mathematics and parameters are frozen.
 
-## Stage 3A.0 current worktree: GNSS source evidence shadow
+## Stage 3A.0 frozen validation: GNSS source evidence shadow
 
 The RRR-only option `estimate_gnss_source_reliability` defaults to `false`.
 When enabled, a logger-independent computation enumerates current DD
@@ -144,8 +144,51 @@ have not been established.
 The evidence can be computed with `log_intermediate_data=false`; CSV logging is
 only an optional consumer. No evidence is applied to the Graph, residuals,
 losses, covariance, rejection, AR, solver, marginalization, Vision, IMU, or
-Motion. Stage 3A.0 has not been compiled, runtime tested, dataset tested, or
-experimentally validated.
+Motion.
+
+The user completed E0/E1/E2 repeatability runs and reported Stage 3A.0 PASS.
+PR population, DD-PR group shift/scale, insufficiency, and GDOP evidence were
+highly repeatable. Group-shift all/eligible P90 pairwise Spearman was about
+0.99997--0.99999, group-scale eligible P90 about 0.996--0.999, insufficiency
+ratios were identical, and the 219 s group-shift/scale anomaly repeated in all
+three runs. Trajectory output still had substantial run-to-run variability, so
+GT/APE must not be used to tune online reliability.
+
+Raw carrier-phase evidence was materially more solver/path dependent: phase
+P90 pairwise Spearman was about 0.945--0.974 and some epoch differences were
+large. Source inspection attributes this to current pose and, especially, to
+whether each ambiguity value is a current phase-code initializer or a value
+copied through an actual relative-ambiguity connection. Raw phase evidence is
+therefore conditional inconsistency, not pure carrier-phase source quality.
+
+## Stage 3A.1a current worktree: conditional GNSS evidence shadow
+
+Stage 3A.1a reuses `estimate_gnss_source_reliability`; no new option or apply
+path is added. It records only first-solve-before shadow evidence:
+
+- DD carrier-phase factors are classified as both continued/no-slip, both new,
+  either mixed direction, any slip, or unknown. Continued requires an actual
+  `RelativeAmbiguityError` connection and the current parameter value to equal
+  the connected previous value; matching identity alone is insufficient.
+- Only the both-continued/no-slip subset contributes the loss-free normalized
+  continuity-conditioned phase-inconsistency population.
+- Exact current SD phase-code ambiguity initializers are captured before the
+  existing relative-ambiguity path can overwrite them. For actual continued
+  ambiguities, initializer-minus-previous-value absolute innovations are
+  summarized in meters as ambiguity-state transition evidence only.
+- Previous GNSS FIX/FLOAT status is logged solely as offline explanatory
+  metadata and does not enter any reliability/confidence rule.
+- Loss-free normalized Doppler residuals are grouped by constellation. Each
+  system records support, signed median center, and `1.4826*MAD` scale, followed
+  by epoch summaries. Because factor information can differ, this is called
+  per-system frequency/velocity-conditioned Doppler evidence, not exact raw
+  receiver-frequency cancellation.
+
+The implementation adds no `R_G`, `C_G`, source weighting, temporal trust,
+nuisance projection, or optimizer intervention. Stage 3A.1a has only been
+implemented and statically reviewed in this worktree; compilation, runtime
+invariance, CSV inspection, repeatability, and dataset validation remain
+pending in the user's container.
 
 ---
 
@@ -267,19 +310,23 @@ any estimator computation.
 - Stage 2B B1/M1, B2/M2, and B3/M3 runtime experiments were reported complete
   by the user. Factor-level behavior was stable, but trajectory-tail benefit was
   not repeatable.
-- Stage 3A.0 implementation has undergone source-level/static review only.
+- Stage 3A.0 E0/E1/E2 repeatability validation was reported PASS by the user;
+  the PR/group/insufficiency/GDOP evidence was highly repeatable, while raw
+  carrier-phase evidence showed material ambiguity/solver-path coupling.
+- Stage 3A.1a implementation has undergone source-level/static review only.
 
 ## Validation not yet performed
 
-- Compilation of the Stage 3A.0 worktree.
-- Runtime verification that option=false reproduces the frozen Stage 2B code
-  path and option=true changes only evidence computation/logging.
-- CSV schema/row-count, finite/failure accounting, NaN, ratio, exact grouping,
-  GDOP-validity, and elevation-validity checks.
-- Runtime cost of source evidence with logging disabled and enabled.
-- Cross-sequence/dataset calibration of the recorded evidence distributions.
+- Compilation of the Stage 3A.1a worktree.
+- Runtime verification that Stage 3A.1a changes only shadow
+  computation/logging and leaves trajectory, solver, rejection, and AR outputs
+  invariant under otherwise identical configuration.
+- Stage 3A.1a CSV schema/count/ratio checks, ambiguity-provenance accounting,
+  initializer-transition semantics, and per-system Doppler aggregation checks.
+- Stage 3A.1a E0/E1/E2 repeatability comparison and external sequence/dataset
+  validation of the conditional evidence.
 
-Do not describe Stage 3A.0 as compiled, runtime tested, dataset tested, or
+Do not describe Stage 3A.1a as compiled, runtime tested, dataset tested, or
 experimentally validated.
 
 ---
@@ -333,25 +380,22 @@ experimentally validated.
 
 ## Current research hypothesis and implementation
 
-Stage 2B showed that factor-local DD pseudorange reliability can be estimated
-and applied before the first solve, but the resulting trajectory-tail benefit
-was not repeatable. The current hypothesis is therefore narrower: population
-inconsistency, group/common shift, group dispersion, geometry, and evidence
-sufficiency may provide a more complete and generalizable description of GNSS
-source reliability than a single DD-pseudorange factor-local score.
-
-Stage 3A.0 only records those quantities. It does not claim that they form a
-validated GNSS source reliability estimator and does not define or apply a
-source reliability/confidence value.
+Stage 3A.0 established repeatable PR/group/insufficiency/GDOP evidence but also
+showed that raw phase statistics are conditional on ambiguity and prior solver
+state. Stage 3A.1a therefore tests whether explicit ambiguity provenance and
+per-system Doppler conditioning produce interpretable, repeatable evidence.
+It does not claim that these fields form a validated source reliability
+estimator and does not define or apply reliability/confidence values.
 
 ## Next experimental plan
 
-Compile Stage 3A.0 in the user's container, then compare identical runs with
-`estimate_gnss_source_reliability=false/true`. First verify optimization,
-rejection, AR, and trajectory invariance and validate the evidence CSV schema.
-Then perform offline normal/failure-window inspection under the Generalization
-Contract. Do not construct `R_G`, `C_G`, source weights, temporal logic, or
-cross-source trust until the shadow evidence has been evaluated.
+Compile Stage 3A.1a in the user's container and run otherwise identical shadow
+repeats with `estimate_gnss_source_reliability=true`. Validate categorical
+accounting, exact ambiguity-value provenance, transition-innovation units,
+per-system Doppler rows, and optimizer invariance. Then compare conditional
+evidence repeatability across E0/E1/E2 and external sequences. Do not construct
+`R_G`, `C_G`, source weights, temporal logic, or cross-source trust until this
+shadow evidence has been evaluated.
 
 ---
 
@@ -370,10 +414,12 @@ cross-source trust until the shadow evidence has been evaluated.
 - [x] Stage 2B B1/M1 through B3/M3 experiments reported complete
 - [x] Stage 2B classified as a factor-level feasibility study
 - [x] Generalization Contract adopted as a hard design constraint
-- [x] Stage 3A.0 shadow evidence implemented in the current worktree
+- [x] Stage 3A.0 shadow evidence implemented at `944ab6c`
+- [x] Stage 3A.0 E0/E1/E2 repeatability validation reported PASS
+- [x] Stage 3A.1a conditional evidence shadow implemented in the worktree
 - [x] current `git diff --check`
-- [ ] Stage 3A.0 compilation
-- [ ] Stage 3A.0 option=false/true invariance run
-- [ ] Stage 3A.0 evidence CSV sanity and timing checks
-- [ ] Stage 3A.0 offline evidence assessment
-- [ ] cross-dataset evidence calibration/validation
+- [ ] Stage 3A.1a compilation
+- [ ] Stage 3A.1a optimizer-invariance run
+- [ ] Stage 3A.1a conditional evidence CSV sanity checks
+- [ ] Stage 3A.1a repeatability assessment
+- [ ] cross-dataset conditional-evidence validation

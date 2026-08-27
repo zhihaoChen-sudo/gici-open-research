@@ -30,6 +30,32 @@ using DdPseudorangeGroupKey =
   std::tuple<char, std::string, int, int, int, int>;
 using UsedSatelliteKey = std::pair<char, std::string>;
 
+enum class AmbiguityValueProvenance {
+  New,
+  Continued,
+  Unknown
+};
+
+struct AmbiguityValueProvenanceResult {
+  AmbiguityValueProvenance provenance = AmbiguityValueProvenance::Unknown;
+  double initializer = std::numeric_limits<double>::quiet_NaN();
+  double previous_value = std::numeric_limits<double>::quiet_NaN();
+};
+
+enum class PhaseFactorProvenance {
+  BothContinuedNoSlip,
+  BothNew,
+  TargetContinuedBaseNew,
+  TargetNewBaseContinued,
+  AnySlip,
+  Unknown
+};
+
+struct DopplerSystemAccumulator {
+  size_t factor_count = 0;
+  std::vector<double> finite_normalized_residuals;
+};
+
 // Deterministic linear-interpolation percentile: sort x, set
 // h=(n-1)*p, then interpolate between floor(h) and ceil(h).
 double percentile(std::vector<double> values, const double probability)
@@ -87,15 +113,125 @@ void addUsedSatellite(
   used_satellites.insert(std::make_pair(prn[0], prn));
 }
 
+AmbiguityValueProvenanceResult inspectAmbiguityValueProvenance(
+  const std::shared_ptr<Graph>& graph, const uint64_t ambiguity_id,
+  const GnssAmbiguityInitializerMap& ambiguity_initializers)
+{
+  AmbiguityValueProvenanceResult result;
+  const auto initializer = ambiguity_initializers.find(ambiguity_id);
+  if (initializer == ambiguity_initializers.end() ||
+      !std::isfinite(initializer->second) ||
+      !graph->parameterBlockExists(ambiguity_id)) {
+    return result;
+  }
+  result.initializer = initializer->second;
+
+  const auto current_parameter = graph->parameterBlockPtr(ambiguity_id);
+  if (!current_parameter || current_parameter->dimension() != 1) return result;
+  const double current_value = current_parameter->parameters()[0];
+  if (!std::isfinite(current_value)) return result;
+
+  std::set<uint64_t> connected_ambiguity_ids;
+  for (const auto& residual : graph->residuals(ambiguity_id)) {
+    if (!residual.error_interface_ptr ||
+        residual.error_interface_ptr->typeInfo() !=
+          ErrorType::kRelativeAmbiguityError) {
+      continue;
+    }
+    const auto parameters = graph->parameters(residual.residual_block_id);
+    if (parameters.size() != 2) return result;
+    for (const auto& parameter : parameters) {
+      if (parameter.first != ambiguity_id &&
+          BackendId(parameter.first).type() == IdType::gAmbiguity) {
+        connected_ambiguity_ids.insert(parameter.first);
+      }
+    }
+  }
+
+  if (connected_ambiguity_ids.empty()) {
+    // The current value has remained exactly at the captured construction
+    // initializer, and no relative ambiguity connection can have overwritten
+    // it. This is the actual value provenance used by the first solve.
+    if (current_value == result.initializer) {
+      result.provenance = AmbiguityValueProvenance::New;
+    }
+    return result;
+  }
+  if (connected_ambiguity_ids.size() != 1) return result;
+
+  const uint64_t previous_id = *connected_ambiguity_ids.begin();
+  if (!graph->parameterBlockExists(previous_id)) return result;
+  const auto previous_parameter = graph->parameterBlockPtr(previous_id);
+  if (!previous_parameter || previous_parameter->dimension() != 1) return result;
+  result.previous_value = previous_parameter->parameters()[0];
+  if (!std::isfinite(result.previous_value)) return result;
+
+  // addRelativeAmbiguityResidualBlock() copies the previous value into the
+  // current parameter. Require that exact copied value as well as the actual
+  // relative connection; a matching ambiguity identity alone is insufficient.
+  if (current_value == result.previous_value) {
+    result.provenance = AmbiguityValueProvenance::Continued;
+  }
+  return result;
+}
+
+PhaseFactorProvenance classifyPhaseFactorProvenance(
+  const std::shared_ptr<Graph>& graph,
+  const Graph::ResidualBlockSpec& residual_block,
+  const std::shared_ptr<PhaserangeErrorDD<7, 3, 1, 1>>& error,
+  const GnssAmbiguityInitializerMap& ambiguity_initializers)
+{
+  if (!error) return PhaseFactorProvenance::Unknown;
+  if (error->hasAnyConstructionObservationSlip()) {
+    return PhaseFactorProvenance::AnySlip;
+  }
+
+  const auto parameters = graph->parameters(residual_block.residual_block_id);
+  if (parameters.size() != 4 ||
+      BackendId(parameters[2].first).type() != IdType::gAmbiguity ||
+      BackendId(parameters[3].first).type() != IdType::gAmbiguity) {
+    return PhaseFactorProvenance::Unknown;
+  }
+
+  const AmbiguityValueProvenance target = inspectAmbiguityValueProvenance(
+    graph, parameters[2].first, ambiguity_initializers);
+  const AmbiguityValueProvenance base = inspectAmbiguityValueProvenance(
+    graph, parameters[3].first, ambiguity_initializers);
+  if (target.provenance == AmbiguityValueProvenance::Continued &&
+      base.provenance == AmbiguityValueProvenance::Continued) {
+    return PhaseFactorProvenance::BothContinuedNoSlip;
+  }
+  if (target.provenance == AmbiguityValueProvenance::New &&
+      base.provenance == AmbiguityValueProvenance::New) {
+    return PhaseFactorProvenance::BothNew;
+  }
+  if (target.provenance == AmbiguityValueProvenance::Continued &&
+      base.provenance == AmbiguityValueProvenance::New) {
+    return PhaseFactorProvenance::TargetContinuedBaseNew;
+  }
+  if (target.provenance == AmbiguityValueProvenance::New &&
+      base.provenance == AmbiguityValueProvenance::Continued) {
+    return PhaseFactorProvenance::TargetNewBaseContinued;
+  }
+  return PhaseFactorProvenance::Unknown;
+}
+
 }  // namespace
 
 GnssSourceReliabilityEvidence computeGnssSourceReliabilityEvidence(
   const std::shared_ptr<Graph>& graph, const State& state,
-  const GnssMeasurement& measurement_rov, const double gdop)
+  const State& last_gnss_state, const GnssMeasurement& measurement_rov,
+  const double gdop,
+  const GnssAmbiguityInitializerMap& ambiguity_initializers)
 {
   GnssSourceReliabilityEvidence evidence;
   evidence.computed = true;
   evidence.timestamp = state.timestamp;
+  evidence.last_gnss_solution_status_valid =
+    last_gnss_state.id != BackendId(0) && last_gnss_state.timestamp != 0.0;
+  if (evidence.last_gnss_solution_status_valid) {
+    evidence.last_gnss_solution_status = last_gnss_state.status;
+  }
   evidence.gdop = gdop;
   // Existing computeDops paths use 100 as a failure sentinel and may return
   // zero when the receiver position is unavailable.
@@ -104,8 +240,10 @@ GnssSourceReliabilityEvidence computeGnssSourceReliabilityEvidence(
   std::vector<double> pseudorange_absolute_residuals;
   std::vector<double> phaserange_absolute_residuals;
   std::vector<double> doppler_absolute_residuals;
+  std::vector<double> continuity_conditioned_phase_absolute_residuals;
   std::map<DdPseudorangeGroupKey, std::vector<double>>
     pseudorange_group_finite_residuals;
+  std::map<char, DopplerSystemAccumulator> doppler_system_accumulators;
   std::set<UsedSatelliteKey> used_satellites;
 
   const auto residual_blocks = graph->residuals(state.id_in_graph.asInteger());
@@ -117,6 +255,9 @@ GnssSourceReliabilityEvidence computeGnssSourceReliabilityEvidence(
     std::vector<double>* absolute_residuals = nullptr;
     DdPseudorangeGroupKey pseudorange_group_key;
     bool has_pseudorange_group_key = false;
+    PhaseFactorProvenance phase_provenance = PhaseFactorProvenance::Unknown;
+    bool is_phase_factor = false;
+    char doppler_system = '\0';
 
     if (type == ErrorType::kPseudorangeErrorDD) {
       population = &evidence.pseudorange;
@@ -140,12 +281,35 @@ GnssSourceReliabilityEvidence computeGnssSourceReliabilityEvidence(
     else if (type == ErrorType::kPhaserangeErrorDD) {
       population = &evidence.phaserange;
       absolute_residuals = &phaserange_absolute_residuals;
+      is_phase_factor = true;
+      evidence.phase_conditional.total_count++;
       const auto error = std::dynamic_pointer_cast<PhaserangeErrorDD<7, 3, 1, 1>>(
         residual_block.error_interface_ptr);
       if (error) {
-        const GnssMeasurementDDIndexPair index = error->getGnssMeasurementIndex();
+        const GnssMeasurementDDIndexPair& index =
+          error->constructionArrangedMeasurementIndex();
         addUsedSatellite(index.rov.prn, used_satellites);
         addUsedSatellite(index.rov_base.prn, used_satellites);
+      }
+      phase_provenance = classifyPhaseFactorProvenance(
+        graph, residual_block, error, ambiguity_initializers);
+      switch (phase_provenance) {
+        case PhaseFactorProvenance::BothContinuedNoSlip:
+          evidence.phase_conditional.both_continued_count++;
+          break;
+        case PhaseFactorProvenance::BothNew:
+          evidence.phase_conditional.both_new_count++;
+          break;
+        case PhaseFactorProvenance::TargetContinuedBaseNew:
+        case PhaseFactorProvenance::TargetNewBaseContinued:
+          evidence.phase_conditional.mixed_count++;
+          break;
+        case PhaseFactorProvenance::AnySlip:
+          evidence.phase_conditional.any_slip_count++;
+          break;
+        case PhaseFactorProvenance::Unknown:
+          evidence.phase_conditional.unknown_count++;
+          break;
       }
     }
     else if (type == ErrorType::kDopplerError) {
@@ -156,6 +320,10 @@ GnssSourceReliabilityEvidence computeGnssSourceReliabilityEvidence(
       if (error) {
         const GnssMeasurementIndex index = error->getGnssMeasurementIndex();
         addUsedSatellite(index.prn, used_satellites);
+        if (!index.prn.empty()) {
+          doppler_system = index.prn[0];
+          doppler_system_accumulators[doppler_system].factor_count++;
+        }
       }
     }
     else {
@@ -170,6 +338,15 @@ GnssSourceReliabilityEvidence computeGnssSourceReliabilityEvidence(
     if (!evaluate_success || !std::isfinite(normalized_residual)) continue;
 
     absolute_residuals->push_back(std::fabs(normalized_residual));
+    if (is_phase_factor &&
+        phase_provenance == PhaseFactorProvenance::BothContinuedNoSlip) {
+      continuity_conditioned_phase_absolute_residuals.push_back(
+        std::fabs(normalized_residual));
+    }
+    if (doppler_system != '\0') {
+      doppler_system_accumulators[doppler_system].
+        finite_normalized_residuals.push_back(normalized_residual);
+    }
     if (has_pseudorange_group_key) {
       pseudorange_group_finite_residuals[pseudorange_group_key].push_back(
         normalized_residual);
@@ -179,6 +356,103 @@ GnssSourceReliabilityEvidence computeGnssSourceReliabilityEvidence(
   finalizePopulation(evidence.pseudorange, pseudorange_absolute_residuals);
   finalizePopulation(evidence.phaserange, phaserange_absolute_residuals);
   finalizePopulation(evidence.doppler, doppler_absolute_residuals);
+
+  GnssPhaseConditionalEvidence& phase = evidence.phase_conditional;
+  phase.both_continued_ratio = ratioOrNan(
+    phase.both_continued_count, phase.total_count);
+  phase.both_new_ratio = ratioOrNan(phase.both_new_count, phase.total_count);
+  phase.mixed_ratio = ratioOrNan(phase.mixed_count, phase.total_count);
+  phase.any_slip_ratio = ratioOrNan(phase.any_slip_count, phase.total_count);
+  phase.unknown_ratio = ratioOrNan(phase.unknown_count, phase.total_count);
+  phase.continuity_conditioned_count =
+    continuity_conditioned_phase_absolute_residuals.size();
+  if (!continuity_conditioned_phase_absolute_residuals.empty()) {
+    phase.continuity_conditioned_median_abs_normalized = percentile(
+      continuity_conditioned_phase_absolute_residuals, 0.5);
+    phase.continuity_conditioned_p90_abs_normalized = percentile(
+      continuity_conditioned_phase_absolute_residuals, 0.9);
+    phase.continuity_conditioned_max_abs_normalized = *std::max_element(
+      continuity_conditioned_phase_absolute_residuals.begin(),
+      continuity_conditioned_phase_absolute_residuals.end());
+    size_t count_gt3 = 0, count_gt5 = 0;
+    for (const double residual :
+         continuity_conditioned_phase_absolute_residuals) {
+      if (residual > 3.0) count_gt3++;
+      if (residual > 5.0) count_gt5++;
+    }
+    phase.continuity_conditioned_fraction_gt3 = ratioOrNan(
+      count_gt3, continuity_conditioned_phase_absolute_residuals.size());
+    phase.continuity_conditioned_fraction_gt5 = ratioOrNan(
+      count_gt5, continuity_conditioned_phase_absolute_residuals.size());
+  }
+
+  std::vector<double> ambiguity_transition_absolute_innovations_m;
+  for (const auto& initializer : ambiguity_initializers) {
+    const AmbiguityValueProvenanceResult provenance =
+      inspectAmbiguityValueProvenance(
+        graph, initializer.first, ambiguity_initializers);
+    if (provenance.provenance != AmbiguityValueProvenance::Continued) continue;
+    const double innovation = provenance.initializer - provenance.previous_value;
+    if (std::isfinite(innovation)) {
+      ambiguity_transition_absolute_innovations_m.push_back(
+        std::fabs(innovation));
+    }
+  }
+  evidence.ambiguity_transition.count =
+    ambiguity_transition_absolute_innovations_m.size();
+  setDistributionSummary(ambiguity_transition_absolute_innovations_m,
+    evidence.ambiguity_transition.median_abs_m,
+    evidence.ambiguity_transition.p90_abs_m,
+    evidence.ambiguity_transition.max_abs_m);
+
+  std::vector<double> doppler_system_support;
+  std::vector<double> doppler_system_center_abs;
+  std::vector<double> doppler_system_scales;
+  for (const auto& system : doppler_system_accumulators) {
+    GnssDopplerSystemGroupEvidence system_evidence;
+    system_evidence.system = system.first;
+    system_evidence.factor_count = system.second.factor_count;
+    system_evidence.finite_count =
+      system.second.finite_normalized_residuals.size();
+    system_evidence.evaluation_failure_count =
+      system_evidence.factor_count - system_evidence.finite_count;
+    doppler_system_support.push_back(system_evidence.factor_count);
+
+    if (!system.second.finite_normalized_residuals.empty()) {
+      system_evidence.center_normalized = percentile(
+        system.second.finite_normalized_residuals, 0.5);
+      std::vector<double> absolute_deviations;
+      absolute_deviations.reserve(
+        system.second.finite_normalized_residuals.size());
+      for (const double residual : system.second.finite_normalized_residuals) {
+        absolute_deviations.push_back(
+          std::fabs(residual - system_evidence.center_normalized));
+      }
+      system_evidence.scale_normalized =
+        1.4826 * percentile(absolute_deviations, 0.5);
+      doppler_system_center_abs.push_back(
+        std::fabs(system_evidence.center_normalized));
+      doppler_system_scales.push_back(system_evidence.scale_normalized);
+    }
+    evidence.doppler_conditional.systems.push_back(system_evidence);
+  }
+  evidence.doppler_conditional.system_count =
+    evidence.doppler_conditional.systems.size();
+  if (!doppler_system_support.empty()) {
+    evidence.doppler_conditional.minimum_system_support =
+      static_cast<size_t>(*std::min_element(
+        doppler_system_support.begin(), doppler_system_support.end()));
+    evidence.doppler_conditional.median_system_support = percentile(
+      doppler_system_support, 0.5);
+  }
+  setDistributionSummary(doppler_system_center_abs,
+    evidence.doppler_conditional.system_center_abs_p50,
+    evidence.doppler_conditional.system_center_abs_p90,
+    evidence.doppler_conditional.system_center_abs_max);
+  setDistributionSummary(doppler_system_scales,
+    evidence.doppler_conditional.system_scale_p50,
+    evidence.doppler_conditional.system_scale_p90,
+    evidence.doppler_conditional.system_scale_max);
 
   GnssDdPseudorangeGroupEvidence& groups = evidence.pseudorange_groups;
   groups.group_count = pseudorange_group_finite_residuals.size();

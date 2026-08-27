@@ -93,6 +93,21 @@ public:
     coordinate_ = coordinate;
   }
 
+  // Get the arranged measurement indexes supplied to the constructor. This is
+  // diagnostics-only construction metadata and is intentionally separate from
+  // getGnssMeasurementIndex(), which preserves its existing raw-code behavior.
+  const GnssMeasurementDDIndexPair& constructionArrangedMeasurementIndex() const {
+    return construction_arranged_measurement_index_;
+  }
+
+  // A DD ambiguity is single-differenced between rover and reference. Report
+  // a slip if any of the four observations used by this DD factor is marked.
+  // This metadata is not consulted by Evaluate() or factor admission.
+  bool hasAnyConstructionObservationSlip() const {
+    return observation_rov_.slip || observation_ref_.slip ||
+      observation_rov_base_.slip || observation_ref_base_.slip;
+  }
+
   // error term and Jacobian implementation
   /**
     * @brief This evaluates the error term and additionally computes the Jacobians.
@@ -159,6 +174,10 @@ protected:
   Observation observation_rov_, observation_ref_,
               observation_rov_base_, observation_ref_base_;
 
+  // Read-only construction metadata. It is not used by Evaluate(), the
+  // Jacobians, or the information model.
+  GnssMeasurementDDIndexPair construction_arranged_measurement_index_;
+
   // weighting related
   GnssErrorParameter error_parameter_;
   information_t information_; ///< The DimxDim information matrix.
@@ -185,4 +204,3 @@ template class PhaserangeErrorDD<3, 1, 1, 1, 1, 1, 1>;  // Group 3
 template class PhaserangeErrorDD<7, 3, 1, 1, 1, 1, 1, 1>;  // Group 4
 
 }  
-

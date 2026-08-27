@@ -77,9 +77,8 @@ is not the next research direction.
 
 ### Status
 
-Implemented in the current worktree and statically reviewed only. Compilation,
-runtime execution, CSV inspection, dataset testing, and experimental validation
-remain pending.
+E0/E1/E2 repeatability experiment completed and reported PASS by the user.
+Stage 3A.0 is frozen.
 
 ### Objective
 
@@ -116,12 +115,92 @@ GT/EVO/APE, event-time, location, route, satellite-ID, or dataset-identity
 logic; first-solve evidence must be available before the first optimize; and
 mechanisms/parameters must eventually be frozen before external validation.
 
-### Next validation
+### Result
 
-Run otherwise identical option=false/true shadow pairs in the user's container.
-Verify trajectory, solver, rejection, and AR invariance before interpreting the
-new CSV. Do not proceed to Stage 3A.1 or formulate/apply `R_G`/`C_G` until this
-shadow evidence has been inspected.
+- PR population, DD-PR group shift/scale, insufficiency ratios, and GDOP were
+  highly repeatable across E0/E1/E2.
+- Group-shift all/eligible P90 pairwise Spearman was approximately
+  0.99997--0.99999; group-scale eligible P90 was approximately 0.996--0.999.
+- Insufficiency ratios were identical in all three runs.
+- The 219 s group-shift/scale anomaly repeated in all three runs.
+- Raw phase P90 was less repeatable, with pairwise Spearman approximately
+  0.945--0.974 and large differences at individual epochs.
+- Trajectory output retained visible run-to-run variability; GT/APE is not an
+  online reliability input or a calibration target.
+
+### Interpretation
+
+The PR/group/sufficiency evidence is sufficiently repeatable to freeze the
+Stage 3A.0 mechanism. Raw phase evidence is ambiguity- and solver-path-coupled,
+so it must not be treated as pure carrier-phase source quality. The next stage
+is conditional evidence shadowing, not `R_G`/`C_G` construction or weighting.
+
+## Stage 3A.1a: Conditional GNSS Evidence Shadow
+
+### Status
+
+Implemented in the current worktree and statically reviewed only. It has not
+been compiled, runtime tested, repeatability tested, dataset tested, or
+experimentally validated.
+
+### Objective
+
+Record first-solve-before ambiguity-provenance-conditioned phase evidence,
+ambiguity-state transition evidence, and per-system Doppler center/dispersion
+without changing the optimization objective or introducing final reliability
+or confidence values.
+
+### Configuration
+
+- Reuses `estimate_gnss_source_reliability=false/true`.
+- No new apply or conditional-evidence option is introduced.
+- CSV output still additionally requires `log_intermediate_data=true`.
+
+### Phase provenance and conditioned population
+
+Each current DD carrier-phase factor is classified into both continued/no-slip,
+both new, either mixed direction, any slip, or unknown. Continued requires both
+an actual `RelativeAmbiguityError` connection and exact current-value equality
+with the connected previous ambiguity; identity matching alone is not enough.
+Slip metadata comes from the exact arranged observations stored at factor
+construction and covers all four DD observations.
+
+Only both-continued/no-slip factors contribute the loss-free normalized
+continuity-conditioned phase-inconsistency population. It is not labeled pure
+carrier-phase measurement error or reliability.
+
+### Ambiguity transition evidence
+
+The exact SD phase-code initializer is captured immediately after the existing
+ambiguity construction and before the relative-ambiguity path can overwrite the
+current value. For ambiguities with an actual continuation, the absolute
+difference between that initializer and the connected previous value is
+summarized by count/median/P90/max. It is unnormalized and measured in meters;
+it is ambiguity-state transition evidence only.
+
+Previous GNSS FIX/FLOAT status is logged as offline explanatory metadata only.
+It is prohibited from entering `R_G`, `C_G`, or any current rule because it is
+solver/AR-path dependent.
+
+### Doppler conditional evidence
+
+Loss-free normalized Doppler residuals are grouped by constellation. A separate
+per-system CSV records factor/finite/failure counts, signed median normalized
+center, and `1.4826*MAD` normalized scale without a floor. The epoch CSV records
+system support and center/scale summaries. Because each factor may use different
+information, these quantities are per-system frequency/velocity-conditioned
+Doppler evidence, not exact cancellation of a raw receiver-frequency offset.
+
+No raw-domain common-offset estimator or Jacobian nuisance projection is added
+in Stage 3A.1a.
+
+### Required validation
+
+Compile and run in the user's container. Check option=false behavior, shadow
+optimizer invariance, categorical count/ratio closure, continuity-conditioned
+finite counts, transition units, per-system Doppler aggregation, and CSV field
+alignment. Repeat the shadow run before considering Stage 3A.1b or any final
+`R_G`/`C_G` design.
 
 ## EXP-001
 

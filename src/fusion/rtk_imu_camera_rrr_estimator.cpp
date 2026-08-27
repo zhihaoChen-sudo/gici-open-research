@@ -165,6 +165,7 @@ RtkImuCameraRrrEstimator::~RtkImuCameraRrrEstimator()
   rrr_epoch_diagnostics_logger_.close();
   dd_pseudorange_reliability_diagnostics_logger_.close();
   gnss_source_reliability_evidence_logger_.close();
+  gnss_doppler_system_evidence_logger_.close();
 }
 
 void RtkImuCameraRrrEstimator::createDiagnosticLoggers()
@@ -242,7 +243,32 @@ void RtkImuCameraRrrEstimator::createDiagnosticLoggers()
       "unique_used_satellite_count,gdop,gdop_valid,"
       "snr_sample_count,snr_valid,snr_p10,snr_median,"
       "elevation_sample_count,elevation_valid,elevation_p10_deg,"
-      "elevation_median_deg");
+      "elevation_median_deg,"
+      "last_gnss_solution_status_valid,last_gnss_solution_status,"
+      "phase_total_count,phase_both_continued_count,phase_both_continued_ratio,"
+      "phase_both_new_count,phase_both_new_ratio,phase_mixed_count,"
+      "phase_mixed_ratio,phase_any_slip_count,phase_any_slip_ratio,"
+      "phase_unknown_count,phase_unknown_ratio,"
+      "phase_continuity_conditioned_count,"
+      "phase_continuity_conditioned_median_abs_normalized,"
+      "phase_continuity_conditioned_p90_abs_normalized,"
+      "phase_continuity_conditioned_max_abs_normalized,"
+      "phase_continuity_conditioned_fraction_gt3,"
+      "phase_continuity_conditioned_fraction_gt5,"
+      "ambiguity_transition_innovation_count,"
+      "ambiguity_transition_innovation_median_abs_m,"
+      "ambiguity_transition_innovation_p90_abs_m,"
+      "ambiguity_transition_innovation_max_abs_m,"
+      "doppler_system_count,doppler_minimum_system_support,"
+      "doppler_median_system_support,doppler_system_center_abs_p50,"
+      "doppler_system_center_abs_p90,doppler_system_center_abs_max,"
+      "doppler_system_scale_p50,doppler_system_scale_p90,"
+      "doppler_system_scale_max");
+    createDiagnosticLogger(
+      gnss_doppler_system_evidence_logger_, directory,
+      "gnss_doppler_system_evidence",
+      "timestamp,system,factor_count,finite_count,evaluation_failure_count,"
+      "center_normalized,scale_normalized");
   }
 }
 
@@ -254,6 +280,11 @@ void RtkImuCameraRrrEstimator::logGnssSourceReliabilityEvidence(
 
   const GnssDdPseudorangeGroupEvidence& groups =
     evidence.pseudorange_groups;
+  const GnssPhaseConditionalEvidence& phase = evidence.phase_conditional;
+  const GnssAmbiguityTransitionEvidence& transition =
+    evidence.ambiguity_transition;
+  const GnssDopplerConditionalEvidence& doppler =
+    evidence.doppler_conditional;
   gnss_source_reliability_evidence_logger_ << std::setprecision(15)
     << evidence.timestamp << ",";
   appendGnssResidualPopulationEvidence(
@@ -280,7 +311,42 @@ void RtkImuCameraRrrEstimator::logGnssSourceReliabilityEvidence(
     << evidence.snr_valid << "," << evidence.snr_p10 << ","
     << evidence.snr_median << "," << evidence.elevation_sample_count << ","
     << evidence.elevation_valid << "," << evidence.elevation_p10_deg << ","
-    << evidence.elevation_median_deg << '\n';
+    << evidence.elevation_median_deg << ","
+    << evidence.last_gnss_solution_status_valid << ",";
+  if (evidence.last_gnss_solution_status_valid) {
+    gnss_source_reliability_evidence_logger_ <<
+      gnssSolutionStatusString(evidence.last_gnss_solution_status);
+  }
+  gnss_source_reliability_evidence_logger_
+    << "," << phase.total_count << "," << phase.both_continued_count << ","
+    << phase.both_continued_ratio << "," << phase.both_new_count << ","
+    << phase.both_new_ratio << "," << phase.mixed_count << ","
+    << phase.mixed_ratio << "," << phase.any_slip_count << ","
+    << phase.any_slip_ratio << "," << phase.unknown_count << ","
+    << phase.unknown_ratio << "," << phase.continuity_conditioned_count << ","
+    << phase.continuity_conditioned_median_abs_normalized << ","
+    << phase.continuity_conditioned_p90_abs_normalized << ","
+    << phase.continuity_conditioned_max_abs_normalized << ","
+    << phase.continuity_conditioned_fraction_gt3 << ","
+    << phase.continuity_conditioned_fraction_gt5 << ","
+    << transition.count << "," << transition.median_abs_m << ","
+    << transition.p90_abs_m << "," << transition.max_abs_m << ","
+    << doppler.system_count << "," << doppler.minimum_system_support << ","
+    << doppler.median_system_support << ","
+    << doppler.system_center_abs_p50 << ","
+    << doppler.system_center_abs_p90 << ","
+    << doppler.system_center_abs_max << "," << doppler.system_scale_p50 << ","
+    << doppler.system_scale_p90 << "," << doppler.system_scale_max << '\n';
+
+  if (gnss_doppler_system_evidence_logger_.is_open()) {
+    for (const auto& system : doppler.systems) {
+      gnss_doppler_system_evidence_logger_ << std::setprecision(15)
+        << evidence.timestamp << "," << system.system << ","
+        << system.factor_count << "," << system.finite_count << ","
+        << system.evaluation_failure_count << ","
+        << system.center_normalized << "," << system.scale_normalized << '\n';
+    }
+  }
 }
 
 void RtkImuCameraRrrEstimator::logDdPseudorangeReliabilityDiagnostics(
@@ -712,6 +778,19 @@ bool RtkImuCameraRrrEstimator::addGnssMeasurementAndState(
   // ambiguity blocks
   addSdAmbiguityParameterBlocks(curGnssRov(), 
     curGnssRef(), phase_index_pairs, curGnssRov().id, curAmbiguityState());
+  if (rrr_options_.estimate_gnss_source_reliability) {
+    // Capture the exact values produced by the existing phase-code ambiguity
+    // initialization before addRelativeAmbiguityResidualBlock() can replace
+    // them with previous-state values. This snapshot is read-only shadow data.
+    ambiguity_phase_code_initializers_.clear();
+    for (const BackendId& ambiguity_id : curAmbiguityState().ids) {
+      if (!graph_->parameterBlockExists(ambiguity_id.asInteger())) continue;
+      const auto parameter = graph_->parameterBlockPtr(ambiguity_id.asInteger());
+      if (!parameter || parameter->dimension() != 1) continue;
+      ambiguity_phase_code_initializers_[ambiguity_id.asInteger()] =
+        parameter->parameters()[0];
+    }
+  }
   // frequency block
   int num_valid_doppler_system = 0;
   addFrequencyParameterBlocks(curGnssRov(), curGnssRov().id, num_valid_doppler_system);
@@ -897,13 +976,14 @@ bool RtkImuCameraRrrEstimator::estimate()
   const bool is_gnss_state =
     states_[latest_state_index_].id.type() == IdType::gPose;
   if (rrr_options_.estimate_gnss_source_reliability && is_gnss_state) {
-    // Stage 3A.0 shadow evidence: loss-free normalized inconsistency between
-    // the predicted multi-sensor state and current GNSS observations. This is
-    // deliberately computed before the first optimize() and outside the
-    // log_intermediate_data gate.
+    // Stage 3A shadow evidence: loss-free normalized inconsistency between the
+    // predicted multi-sensor state and current GNSS observations, augmented by
+    // Stage 3A.1a conditional evidence. This is deliberately computed before
+    // the first optimize() and outside the log_intermediate_data gate.
     gnss_source_reliability_evidence_ =
       computeGnssSourceReliabilityEvidence(
-        graph_, states_[latest_state_index_], curGnssRov(), gdop_);
+        graph_, states_[latest_state_index_], lastGnssState(), curGnssRov(),
+        gdop_, ambiguity_phase_code_initializers_);
     if (base_options_.log_intermediate_data) {
       logGnssSourceReliabilityEvidence(gnss_source_reliability_evidence_);
     }

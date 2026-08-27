@@ -28,6 +28,9 @@ PhaserangeErrorDD<Ns ...>::PhaserangeErrorDD(
   CHECK(!checkZero(measurement_ref.position)) << 
     "The position of reference station is not setted!";
 
+  construction_arranged_measurement_index_ = GnssMeasurementDDIndexPair(
+    index_rov, index_ref, index_rov_base, index_ref_base);
+
   setMeasurement(measurement_rov, measurement_ref);
 
   satellite_rov_ = measurement_rov_.getSat(index_rov);

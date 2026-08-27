@@ -9,6 +9,7 @@
 #pragma once
 
 #include <fstream>
+#include <map>
 #include <set>
 
 #include "gici/gnss/gnss_estimator_base.h"
@@ -45,8 +46,8 @@ struct RtkImuCameraRrrEstimatorOptions {
   // Apply the estimated reliability as a DD pseudorange factor cost scale
   bool apply_reliability_weight_for_dd_pseudorange = false;
 
-  // Estimate GNSS source reliability evidence before the first solve. Stage
-  // 3A.0 is shadow-only and never applies this evidence to optimization.
+  // Estimate GNSS source/conditional evidence before the first solve. Stage
+  // 3A remains shadow-only and never applies this evidence to optimization.
   bool estimate_gnss_source_reliability = false;
 };
 
@@ -172,6 +173,11 @@ protected:
   // log_intermediate_data is disabled.
   GnssSourceReliabilityEvidence gnss_source_reliability_evidence_;
 
+  // Exact current-epoch SD phase-code ambiguity initializers, captured after
+  // ambiguity construction and before relative connections can overwrite the
+  // parameter values. Shadow evidence only; never read by optimization.
+  GnssAmbiguityInitializerMap ambiguity_phase_code_initializers_;
+
   // Diagnostic loggers
   std::ofstream visual_residual_diagnostics_logger_;
   std::ofstream imu_residual_diagnostics_logger_;
@@ -180,6 +186,7 @@ protected:
   std::ofstream rrr_epoch_diagnostics_logger_;
   std::ofstream dd_pseudorange_reliability_diagnostics_logger_;
   std::ofstream gnss_source_reliability_evidence_logger_;
+  std::ofstream gnss_doppler_system_evidence_logger_;
 };
 
 }
