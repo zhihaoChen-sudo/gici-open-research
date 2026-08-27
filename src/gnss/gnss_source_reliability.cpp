@@ -193,9 +193,9 @@ PhaseFactorProvenance classifyPhaseFactorProvenance(
     return PhaseFactorProvenance::Unknown;
   }
 
-  const AmbiguityValueProvenance target = inspectAmbiguityValueProvenance(
+  const AmbiguityValueProvenanceResult target = inspectAmbiguityValueProvenance(
     graph, parameters[2].first, ambiguity_initializers);
-  const AmbiguityValueProvenance base = inspectAmbiguityValueProvenance(
+  const AmbiguityValueProvenanceResult base = inspectAmbiguityValueProvenance(
     graph, parameters[3].first, ambiguity_initializers);
   if (target.provenance == AmbiguityValueProvenance::Continued &&
       base.provenance == AmbiguityValueProvenance::Continued) {
