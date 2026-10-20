@@ -1,21 +1,93 @@
 # Current Task Status
 
-Last reconciled: 2026-08-27
+Last reconciled: 2026-09-10
 
 ## Current objective
 
 Develop a generalizable multi-source reliability-aware fusion framework without
 further robust-loss replacement. Stage 3A.0 repeatability validation has passed
-and is frozen. The current HEAD implements Stage 3A.1a, a first-solve-before
-conditional GNSS evidence shadow that separates carrier-phase ambiguity
-provenance and per-system Doppler evidence without changing optimization.
+and is frozen. Stage 3A.1a is closed as a **PARTIAL PASS**. Stage 3A.1b-0
+semantic architecture passed design review, and Stage 3A.1b-0T completed the
+4.1-to-4.2 transfer audit with a **PARTIAL PASS**: semantic transfer and
+within-4.2 repeatability passed, while evidence availability showed a domain
+shift. The active work remains **Stage 3A.1b-1 — Reliability Mapping /
+Calibration**, with offline prototypes only and no authorized runtime mapping
+or control. **Stage 3A.1b-1b.3 — Offline Calibration Prototype
+Execution** completed under the frozen `S3A1b1b3-v1` manifest and is classified
+**PARTIAL**. Input/schema validation passed, the representation audit supported
+multivariate PR attribution, and synthetic nominal mechanics passed 59/60
+coverage checks with zero downward-closure violations. Cross-session empirical
+correction candidates were not stable enough to approve as normative
+calibration. A repeat-hierarchy review then found that the original transfer
+pooled C0/C1/C2 or T0/T1/T2 as one source block population. **Stage
+3A.1b-1b.3R — Corrective Transfer Rerun** is now complete: every source repeat
+was fitted independently and applied to all three target repeats, forming two
+3x3 nested-repeat matrices. **3R corrective execution integrity = PASS**;
+**Stage 3A.1b-1b calibration-prototype scientific outcome = PARTIAL**. The original
+transfer block counts, tail eligibility, bootstrap CIs, candidate directions,
+support-domain applicability inference, and contamination inference are superseded by 3R.
+The previous claim `preregistration deviation = none` is withdrawn; the pooled
+repeat hierarchy was one preregistration deviation, corrected by 3R. Stage
+3A.1b-1b.2 completed DESIGN PASS WITH SEMANTIC REFINEMENTS and is FROZEN. Stage 3A.1b-1b.1 completed DESIGN PASS WITH ONE
+MATHEMATICAL REVISION: current multivariate evidence, its conditional
+calibrated reference region, and the resulting current assessment are distinct
+objects. Stage 3A.1b-1a is FROZEN. Hybrid is the preferred prototype calibration
+direction but is not a final calibrator selection.
+Mandatory scalar or interval `R_G`/`C_G` is rejected; source compression is
+optional and task-specific. No online calibration implementation, weighting,
+covariance adaptation, gating, or temporal trust is authorized.
+
+The active stage is **Stage 3A.1b-1b.4 — Independent-Session Calibration
+Panel Expansion**. Its metadata-only data-role audit is complete and the
+data-role split is frozen: 1.1--5.1 excluding untouched 5.2 form the
+same-platform development/calibration panel, with 5.1 retained as a separately
+stratified long-duration development session; 5.2 remains the untouched
+internal hold-out. That data-role decision used metadata/config/provenance
+only; its audit did not read reliability CSVs, trajectory outcomes, GT/APE,
+AR/FIX results, or 5.2 content. The subsequent 4b/R1 sanity audits read only
+the frozen pre-solve evidence whitelist.
+
+**Stage 3A.1b-1b.4b-R1 — 5.1 Rerun Admission Audit** is complete. The new 5.1
+artifact is `EligibleForPanel`, supersedes the old rejected 5.1 artifact, and
+makes the final Stage 4b panel result **PASS**: all eleven sequences are
+`EligibleForPanel`, with no `Partial` or `Reject`. The old artifact remains
+retained for provenance but is not a calibration input. The current
+executable/config hashes are recorded, but no run
+artifact binds them retrospectively; binary binding remains unproven. This is
+an evidence-integrity/provenance decision, not a trajectory or
+reliability-quality judgment.
+
+**Stage 3A.1b-1b.4c-P is FROZEN under `S3A1b1b4cP-v1`, and Stage
+3A.1b-1b.4c-E has completed. ExecutionIntegrity = PASS; ScientificOutcome =
+PARTIAL.** The primary realization is sequence-balanced across eleven physical
+sequences and three acquisition-date clusters; C1/C2 and T1/T2 never add panel
+weight. All 90% tail rows are Eligible. At 95%, 36/38 rows are Eligible and two
+PR rows are Partial. All 38 99% rows remain DiagnosticOnly; ten meet only the
+support prerequisites for possible upgrade review, not the complete stability
+requirements. LOSO 90/95 folds are assessable without explicit direction
+reversal. Leave-date-cluster-out is weaker: at 95% it has 76 Assessable, 33
+Partial, and five DiagnosticOnly rows, with one PR group-shift direction
+reversal. Contamination sensitivity is the dominant statistical limitation;
+only 4/38 primary 90% rows satisfy both frozen epsilon=0.10/0.20 envelope-width
+heuristics. No empirical mismatch ratio is normative and 0/114 rows are
+EligibleForNormativeReview. Current full CalibrationApplicability also remains
+unknown beyond prototype support-domain descriptors. The unavailable 4.2 T1/T2
+CSV artifacts make the current 4.2 repeat-sensitivity part NotAssessed; no
+substitute, rerun, or parameter change was made.
 
 ---
 
 ## Repository state
 
 - Branch: `exp/pseudorange-firstsolve-huber`
-- HEAD: `0a732d6` (`fix: correct ambiguity provenance result type`)
+- Current documentation HEAD before this sync: `04909fb`
+  (`docs: hand off Stage 3A.1a validation state`)
+- Stage 3A.1a compile/run algorithm-source candidate: `0a732d6`
+  (`fix: correct ambiguity provenance result type`). The user reports that the
+  successful rebuild and OFF/C0/C1/C2 runs occurred after this fix and before
+  the `04909fb` documentation commit. The repository history alone does not
+  independently prove the binary-to-commit association, so this provenance
+  remains user-reported rather than artifact-verified.
 - Stage 3A.1a implementation: `2e25400`
   (`research: add conditional GNSS reliability evidence shadow`)
 - Stage 3A.0 implementation: `944ab6c`
@@ -32,7 +104,7 @@ route, satellite-ID, or dataset-identity logic; evidence used by the first solve
 must be available before that solve; and mechanisms/parameters must eventually
 be frozen for external sequence/dataset validation.
 
-No final GNSS reliability/confidence formula, source weighting, covariance
+No final channel calibrator, GNSS reliability/confidence formula, source weighting, covariance
 adaptation, temporal trust, quarantine, Vision/IMU reliability, cross-source
 weighting, adaptive threshold, second solve, solver change, or ambiguity change
 is implemented by Stage 3A.1a.
@@ -164,7 +236,7 @@ whether each ambiguity value is a current phase-code initializer or a value
 copied through an actual relative-ambiguity connection. Raw phase evidence is
 therefore conditional inconsistency, not pure carrier-phase source quality.
 
-## Stage 3A.1a current HEAD: conditional GNSS evidence shadow
+## Stage 3A.1a final experiment: conditional GNSS evidence shadow
 
 Stage 3A.1a reuses `estimate_gnss_source_reliability`; no new option or apply
 path is added. It records only first-solve-before shadow evidence:
@@ -192,9 +264,94 @@ nuisance projection, or optimizer intervention. The first user-side compile
 attempt found that two variables receiving
 `inspectAmbiguityValueProvenance()` were declared as the enum rather than its
 actual `AmbiguityValueProvenanceResult` return type. Commit `0a732d6` applies
-only that declaration correction. Successful compilation after the fix,
-runtime invariance, CSV inspection, repeatability, and dataset validation
-remain pending in the user's container.
+only that declaration correction. The user subsequently reported a successful
+rebuild and completed OFF/C0/C1/C2 runs and formal analysis.
+
+**Decision: PARTIAL PASS.** Phase category and ratio closure were exact,
+unknown count was zero in C0/C1/C2,
+`continuity_conditioned_count <= both_continued_count`, and Doppler per-system
+count closure was exact. Overall phase provenance was approximately 94.5%
+both-continued/no-slip, 0.7% both-new, 1.7% mixed, 3.0% any-slip, and 0%
+unknown.
+
+Conditioning did not improve global phase P90 rank repeatability. Raw phase
+pairwise Spearman was approximately 0.9938/0.9461/0.9418 for C0/C1, C0/C2,
+and C1/C2, while continuity-conditioned phase was approximately
+0.9896/0.9169/0.9137. Do not tune the conditioner to improve dataset-4.1
+correlation. Conditioning nevertheless strongly removed nuisance-driven
+extreme tails: raw phase P90 had median about 1.66, P99 about 170, and maximum
+about 1050 sigma, versus conditioned median about 1.33, P99 about 3.2--3.3,
+and maximum about 7 sigma. This supports semantic/decontamination value, not
+pure phase quality; conditioned phase remains state/path coupled.
+
+Ambiguity-transition P90 was repeatable (Spearman approximately 0.986--0.992)
+but was not strongly elevated at 135/165/213/219 s. It remains explanatory
+ambiguity-state metadata and must not enter `R_G` directly. Doppler raw P90,
+per-system center, and per-system scale were repeatable, respectively about
+0.9994/0.9887/0.9887, 0.9989/0.9757/0.9761, and
+0.9998/0.9929/0.9930. No more complex nuisance projection is justified by the
+current evidence; Doppler system evidence remains shadow-only.
+
+Offline event interpretation is: 135 s is more strongly a geometry/GDOP issue;
+165 s is dominated by satellite support/GDOP/insufficiency; 213 s is dominated
+by PR insufficiency; and 219 s combines strongly elevated conditioned phase
+P90 (about the 86--88 percentile) with high PR group shift/scale under ordinary
+GDOP, making it the strongest current source-level GNSS degradation case.
+These times are offline mechanism probes only and are prohibited from online
+rules.
+
+## Stage 3A.1b-0T final experiment: 4.1 to 4.2 evidence transfer
+
+Stage 3A.1b-0 semantic architecture completed **DESIGN PASS** before the
+transfer audit. Its frozen channel/validity/dependency semantics remain design
+only; no generic runtime `SourceEvidence` interface or reliability scalar was
+implemented.
+
+The user completed and formally analyzed 4.2 T0/T1/T2 under frozen Stage 3A
+evidence definitions. **Stage 3A.1b-0T decision: PARTIAL PASS.** Implementation
+and schema, cross-sequence semantic transfer, within-4.2 structural
+repeatability, phase-provenance transfer, conditioned-phase semantic transfer,
+PR/group repeatability, and Doppler transfer passed. Evidence availability was
+a domain shift and therefore partial rather than a failure.
+
+Across T0/T1/T2 there were 2340 GNSS-evidence epochs, exactly 48929 PR factors,
+exactly 36898 phase factors, and zero evaluation failures. No-eligible-PR-group
+epochs were exactly 474/2340 (20.26%) in each run, and the median PR
+insufficient-factor ratio was exactly 0.642857. This stable insufficiency is
+evidence about availability/confidence, not measurement badness.
+
+Phase provenance transferred with approximately 94.0% continued, 0.4--0.5%
+new, 2.78% mixed, 2.70% slip, and 0% unknown. Raw phase P90 retained extreme
+tails (P99 approximately 885--1075 sigma, maximum approximately 1801--1812
+sigma), while continuity conditioning reduced them to P99 approximately
+4.16--4.30 sigma and maximum approximately 14.92--14.94 sigma. Conditioning
+again had semantic/decontamination value but did not improve rank
+repeatability; it remains corroborative and state/path coupled.
+
+Pairwise T0/T1/T2 Spearman values were approximately
+0.9966/0.9987/0.9931 for PR P90, 0.9963/0.9981/0.9927 for all-group PR shift,
+0.9934/0.9979/0.9903 for eligible-group shift, 0.9774/0.9912/0.9695 for group
+scale, 0.9882/0.9948/0.9864 for raw phase P90,
+0.9770/0.9869/0.9766 for conditioned-phase P90, and
+0.9976/0.9982/0.9958 for raw Doppler P90. Ambiguity-transition P90 was less
+stable at 0.9476/0.9804/0.9301 and remains explanatory-only.
+
+APE is offline trajectory context only: T0/T1/T2 RMSE was
+1.1976/1.1720/1.2319 m (mean 1.2005 m, sample standard deviation 0.0301 m),
+with run-dependent maxima of 4.298/3.623/4.843 m. Post-AR-success counts were
+1025/909/1021; T1 had the fewest successes but the lowest RMSE. AR/FIX/FLOAT
+status is therefore further excluded from all reliability/confidence mapping.
+
+Around the common 133--134 s offline error episode, PR insufficiency was one,
+eligible PR groups were zero, satellite support was only about 5--7, GDOP was
+extremely poor or invalid, phase was unavailable, and PR inconsistency itself
+was not extreme. This supports separating low source-assessment confidence/
+sufficiency from low measurement quality. The timestamp is an offline mechanism
+probe only and is prohibited from online rules.
+
+Dataset roles are now frozen: 4.1 is development/mechanism-discovery evidence;
+4.2 is inspected development/transfer evidence and is not a pristine final
+hold-out. 5.2 remains only a future internal hold-out candidate.
 
 ---
 
@@ -319,24 +476,102 @@ any estimator computation.
 - Stage 3A.0 E0/E1/E2 repeatability validation was reported PASS by the user;
   the PR/group/insufficiency/GDOP evidence was highly repeatable, while raw
   carrier-phase evidence showed material ambiguity/solver-path coupling.
-- Stage 3A.1a implementation has undergone source-level/static review only.
 - The first Stage 3A.1a compile attempt failed on an ambiguity-provenance
-  return-type mismatch; the minimal correction is committed at `0a732d6`, but
-  no successful recompilation has yet been reported.
+  return-type mismatch; the minimal correction is committed at `0a732d6`.
+- The user reported that the post-fix compile passed, OFF/C0/C1/C2 completed,
+  and formal Stage 3A.1a analysis completed with a PARTIAL PASS decision.
+- Stage 3A.1a implementation sanity passed for phase category/ratio closure,
+  zero unknown count in C0/C1/C2, the conditioned-count bound, and Doppler
+  per-system count closure.
+- Stage 3A.1a conditioning strongly removed extreme phase tails, but the
+  hypothesis that it improves global phase-rank repeatability was not
+  supported.
+- Stage 3A.1b-0 semantic architecture completed DESIGN PASS.
+- Stage 3A.1b-0T 4.2 T0/T1/T2 completed formal analysis with a PARTIAL PASS:
+  semantic transfer/repeatability passed and evidence availability shifted.
+- Stage 3A.1b-1a Structured Assessment Mathematical Contract completed design
+  review and is FROZEN.
+- Stage 3A.1b-1b Analytic/Empirical/Hybrid calibration comparison passed;
+  Hybrid is the preferred prototype direction, not a final selection.
+- Stage 3A.1b-1b.1 representation review completed DESIGN PASS WITH ONE
+  MATHEMATICAL REVISION. Multivariate reference regions are not current
+  channel assessments, and optional joint scalars cannot remove coordinate
+  attribution.
+- The final Stage 3A.1b-1b.2 semantic refinements require finite-sample/MC
+  coverage tolerance, downward-closed acceptance for one-sided badness,
+  upper-tail-only phase quality, two-sided Doppler-center badness with signed
+  attribution, and the term occupancy rather than coverage for unlabeled real
+  4.1/4.2 membership rates.
+- The final Stage 3A.1b-1b.3 pre-registration removes real-data occupancy from
+  transfer PASS criteria, treats empirical quantile ratios only as correction
+  candidates, adds effective tail-cluster eligibility, freezes simultaneous
+  max-t block-bootstrap mathematics, and marks all numeric traffic-light
+  thresholds `not_runtime_parameter=true`.
+- Stage 3A.1b-1b.3R corrected the transfer hierarchy without changing any
+  representation, alpha, block size, bootstrap, contamination grid, tail
+  threshold, synthetic model, or quality semantic. The nine repeat pairs per
+  direction are nested applications, not nine independent session samples.
+- The 180 and 171 corrected rows are **per-source-repeat assessment rows**;
+  they are not independent rows or independent sessions.
+- Current `InDomain`/`OutOfDomain` values check target support against the
+  source-repeat support range only. They are **prototype support-domain
+  applicability**, not complete `CalibrationApplicability`. Full applicability
+  must additionally cover receiver/platform/model, covariance applicability,
+  prediction-state applicability, system/frequency coverage, support regime,
+  and schema/model version.
+- The old PR tradeoff file sampled random epoch-state pairs within each run.
+  It is now explicitly named `within_run_state_pair_incomparability`; a
+  separate `same_timestamp_repeat_pair_tradeoff` metric was executed.
+- Stage 3A.1b-1b.4 metadata audit found nine additional development sequence
+  sessions beyond 4.1/4.2: 1.1, 1.2, 2.1, 2.2, 3.1, 3.2, 3.3, 4.3, and 5.1.
+  All have non-empty rover/reference/ephemeris, IMU, and camera files with
+  structurally valid replay tags. Their rover/IMU/camera tag durations agree
+  within 0.039 s. They are distinct acquisition runs, but span only three
+  collection dates and one documented receiver/platform, so they must not be
+  treated as eleven independent receiver/platform validations.
+- Dataset documentation identifies the common hardware as a Tersus David30
+  multi-frequency receiver, Bosch BMI088 IMU, and Onsemi MT9V034 camera. This
+  supports a same-platform-domain candidacy claim only. Per-sequence observed
+  constellation/frequency participation and complete calibration
+  applicability have not been established by this metadata audit.
+- At the metadata-audit snapshot, per-sequence Stage 3A-compatible YAML existed
+  for 3.1, 4.1, 4.2, and 4.3. The currently visible 3.1 YAML was subsequently
+  reused for a separate DD-PR estimation/weighting rerun and must not be
+  retroactively assigned to the archived shadow evidence. The user reports
+  that the archived 3.1/4.3 evidence used the correct frozen shadow runtime
+  configurations, but no run artifact binds those configs to the CSVs.
+  Historical 2.1/2.2 YAMLs omit current Stage 3A shadow/log options and must
+  not be used as-is. No per-sequence RRR YAML was found for 1.1, 1.2, 3.2,
+  3.3, or 5.1 at that snapshot.
+- Calibration provenance is not fully resolved. The dataset's canonical
+  calibration file records GNSS lever arm `[-0.029, 0.354, -0.042]` m, while
+  all inspected RRR YAMLs use `[-0.035, 0.354, -0.042]` m. The data-directory
+  YAMLs and raw binary files are outside a local checksum/version manifest,
+  the exact RTK reference-station provenance is not encoded in those YAMLs,
+  and actual constellation/frequency participation remains unverified. Do not
+  silently choose either lever arm or infer full domain applicability.
 
 ## Validation not yet performed
 
-- Successful compilation of Stage 3A.1a after commit `0a732d6`.
-- Runtime verification that Stage 3A.1a changes only shadow
-  computation/logging and leaves trajectory, solver, rejection, and AR outputs
-  invariant under otherwise identical configuration.
-- Stage 3A.1a CSV schema/count/ratio checks, ambiguity-provenance accounting,
-  initializer-transition semantics, and per-system Doppler aggregation checks.
-- Stage 3A.1a E0/E1/E2 repeatability comparison and external sequence/dataset
-  validation of the conditional evidence.
+- Artifact-level independent verification of which Git commit produced the
+  OFF/C0/C1/C2 binary; `0a732d6` is the user-reported algorithm provenance.
+- Transfer beyond the already inspected 4.2 development sequence, including
+  environment-stratified and future hold-out validation.
+- Independent development data beyond 4.1/4.2 for calibrator selection and
+  final validation; the completed Stage 3A.1b-1b.3 prototype is not final
+  calibration validation.
+- Independent confirmation of the corrected 3R transfer protocol beyond the
+  two inspected development sequences. Dataset 5.2 remains untouched.
+- Artifact-level executable/config/commit binding for the admitted 5.1 R1 run.
+  Current hashes are recorded, but binary binding cannot be proven
+  retrospectively.
+- Full `CalibrationApplicability` across receiver/platform/model, covariance,
+  prediction state, system/frequency coverage, support regime, and
+  schema/model version. Stage 3A.1b-1b.4 only established metadata-level
+  same-platform candidacy and prototype support-domain readiness.
 
-Do not describe Stage 3A.1a as compiled, runtime tested, dataset tested, or
-experimentally validated.
+Describe Stage 3A.1a as a user-run, formally analyzed PARTIAL PASS, not a full
+experimental PASS or a validated reliability/weighting method.
 
 ---
 
@@ -389,25 +624,142 @@ experimentally validated.
 
 ## Current research hypothesis and implementation
 
-Stage 3A.0 established repeatable PR/group/insufficiency/GDOP evidence but also
-showed that raw phase statistics are conditional on ambiguity and prior solver
-state. Stage 3A.1a therefore tests whether explicit ambiguity provenance and
-per-system Doppler conditioning produce interpretable, repeatable evidence.
-It does not claim that these fields form a validated source reliability
-estimator and does not define or apply reliability/confidence values.
+The architecture under review is explicitly channel-level rather than a
+permanent PR-first hierarchy:
 
-## Next experimental plan
+`factor evidence -> channel calibrated assessment -> canonical S_G -> future
+temporal coordination -> future channel/factor-specific factor management ->
+the same single nonlinear FGO`
 
-Compile Stage 3A.1a in the user's container. After a successful build, run
-`OFF -> C0 -> C1 -> C2`: OFF sets
-`estimate_gnss_source_reliability=false`; C0/C1/C2 set it to `true`; all runs
-otherwise share the same code, binary, dataset, YAML, and solver settings.
-Validate categorical accounting, exact ambiguity-value provenance,
-transition-innovation units, per-system Doppler rows, optimizer invariance,
-and conditional-evidence repeatability. Epochs 135/165/213/219 are offline
-mechanism-analysis windows only, and APE improvement is not a Stage 3A.1a PASS
-criterion. Do not construct `R_G`, `C_G`, source weights, temporal logic, or
-cross-source trust until this shadow evidence has been evaluated.
+The GNSS channels are pseudorange, carrier phase, and Doppler. Their calibrated
+assessments feed canonical structured source assessment `S_G`; mandatory
+scalar or interval `(R_G,C_G)` is rejected. Any future source compression must
+be task-specific and declare identifiability, calibration domain, and
+information loss. It cannot replace channel state or become a uniform GNSS
+factor scale. On dataset 4.1, PR population/group evidence is the currently
+strongest structurally stable evidence family; this is an experiment-specific
+finding, not a permanent cross-dataset source hierarchy.
+
+Assessment validity and cross-channel agreement are separate semantics.
+`AssessmentValidity` is valid, insufficient, or unavailable.
+`CrossChannelState` is concordant, conflicting, or unknown. Conflicting means
+that available valid channels disagree; it is not invalidity or missing data.
+
+Candidate dependency groups are retained without assuming independence:
+
+- PR family: PR population, PR group shift, and PR group scale;
+- phase family: continuity-conditioned phase, phase-continuity coverage, and
+  slip/new/mixed provenance;
+- Doppler family: raw Doppler, per-system center, per-system scale, and system
+  support; and
+- geometry/sufficiency family: satellite support, GDOP, elevation, and
+  evidence validity.
+
+No family aggregation is approved. In particular, uncalibrated components
+must not be combined with `max()`, because they do not yet share a proven
+badness scale or null distribution. Source confidence must not be computed by
+an unconditional `min()` across channel confidences, because an optional
+channel's insufficiency must not destroy otherwise supported GNSS confidence.
+
+Stage 3A.1b-1a freezes a typed channel-quality assessment. A scalar conformity
+interval is legal only when a scalar nonconformity and total ordering are
+justified. Multivariate calibrated regions and partial-order assessments retain
+their native types; OutOfDomain calibration can remain `NotAssessed` even when
+raw evidence is valid. `EvidenceValidity`
+(Valid/Insufficient/Unavailable) and `CalibrationApplicability`
+(InDomain/Partial/OutOfDomain/Unknown) are orthogonal. GDOP, elevation, and
+satellite geometry are shared `S_G` context rather than duplicated in every
+channel confidence record.
+
+Satellite identity is allowed for measurement association, DD grouping and
+reference bookkeeping, ambiguity continuity/slip/provenance tracking, factor
+indexing, and diagnostics. PRN-specific reliability priors, blacklists,
+thresholds, calibration corrections, and control laws are prohibited.
+
+## Next research plan
+
+Stage 3A.1b is split into explicitly separate stages and substages:
+
+- **Stage 3A.1b-0 — Reliability Semantic Interface Shadow: DESIGN PASS.** Its
+  channel, validity, confidence-component, dependency, monotonicity, conflict,
+  and future common-interface semantics are frozen at design level. No generic
+  runtime interface was implemented.
+- **Stage 3A.1b-0T — Cross-Sequence Evidence Transfer Audit: PARTIAL PASS.**
+  4.1 is development/mechanism discovery; inspected 4.2 T0/T1/T2 are transfer
+  evidence and no longer pristine hold-out evidence.
+- **Stage 3A.1b-1 — Reliability Mapping / Calibration: DESIGN REVIEW ONLY.**
+  - **Stage 3A.1b-1a — Structured Assessment Mathematical Contract: FROZEN.**
+    The canonical output is structured `S_G`; mandatory `(R_G,C_G)` is
+    rejected.
+  - **Stage 3A.1b-1b — Channel Calibration Protocol: DESIGN REVIEW.** The
+    Analytic/Empirical/Hybrid comparison passed. Hybrid is the preferred
+    prototype direction only.
+  - **Stage 3A.1b-1b.1 — Channel Calibration Representation Review: DESIGN
+    PASS WITH ONE MATHEMATICAL REVISION.** Current evidence, conditional
+    reference regions, and current assessments are distinct objects.
+  - **Stage 3A.1b-1b.2 — Offline Calibration Prototype Specification: DESIGN
+    PASS WITH SEMANTIC REFINEMENTS; FROZEN.**
+  - **Stage 3A.1b-1b.3 — Offline Calibration Prototype Execution: PARTIAL.**
+    The frozen `validate -> audit -> synthetic-s0 -> 4.1-to-4.2 ->
+    4.2-to-4.1 -> report` sequence completed without online C++, config,
+    GT/APE, or 5.2 access. No final calibrator or runtime parameter was approved.
+  - **Stage 3A.1b-1b.3R — Corrective Transfer Rerun: execution integrity
+    PASS; scientific outcome PARTIAL.** Per-repeat source fits and 3x3
+    nested-repeat target applications supersede the pooled transfer inference.
+    Synthetic S0 and representation definitions were not changed.
+  - **Stage 3A.1b-1b.4 — Independent-Session Calibration Panel Expansion:
+    DATA ROLE / METADATA AUDIT COMPLETE; DATA-ROLE SPLIT FROZEN.** Development
+    panel: 1.1--5.1 except 5.2, with sequence/date/platform clustering retained
+    and 5.1 separately stratified. Untouched internal hold-out: 5.2. No new
+    calibrator fitting has begun.
+    - **Stage 3A.1b-1b.4b — Development Panel Evidence Sanity Audit: FULL
+      PANEL FAIL; 4c HOLD.** All non-rejected complete rows have exact schema,
+      timestamp ordering, PR/phase/Doppler closure, and zero evaluation
+      failures. Dataset 5.1 has one truncated row in each of its three allowed
+      CSVs, 27 evidence epochs without Doppler-system rows, and six preopt-only
+      timestamps. The user confirmed correct frozen shadow runtime configs for
+      archived 3.1/4.3 evidence, so both are `EligibleForPanel`; this provenance
+      is accepted as user-reported, not artifact-bound. The currently visible
+      3.1 weighting config is a later separate run. No calibration was fitted.
+    - **Stage 3A.1b-1b.4b-R1 — 5.1 Rerun Admission Audit: PASS.** The new 5.1
+      run has 22664 source epochs and 865838/734889/1118458 PR/Phase/Doppler
+      factors. Headers and row widths are exact; timestamps are ordered and
+      nonduplicated; all count/ratio/factor-summary closures are exact; all
+      evaluation-failure and unexpected-nonfinite counts are zero; source and
+      preopt timestamps align exactly; and the 84 source epochs without
+      Doppler-system rows all have explicit zero Doppler support. The new run
+      supersedes the retained old rejected artifact. Final Stage 4b panel:
+      eleven Eligible, zero Partial, zero Reject.
+    - **Stage 3A.1b-1b.4c-P — Multi-Session Calibration Prototype
+      Pre-registration: FROZEN.** Coordinate-specific S0 construction,
+      coordinate-specific primary support, full-panel versus fold tail status,
+      inferential/bootstrap universe, simultaneous-CI families, contamination
+      hierarchy, and distinct 5.1 weight/refit sensitivities are fixed in
+      `S3A1b1b4cP-v1`. PR natural-group shift/scale and factor-level conditioned
+      Phase S0 are `ApproximateMechanics`; they cannot enter normative review.
+    - **Stage 3A.1b-1b.4c-E — Multi-Session Calibration Prototype:
+      ExecutionIntegrity PASS; ScientificOutcome PARTIAL.** Eleven primary
+      physical sequences contribute equal sequence weight; 5.1 does not gain
+      primary weight from duration. PR state-pair incomparability is
+      0.26287--0.50700 across sequences, supporting the frozen multivariate
+      representation. Full-panel 90% support is Eligible for all 38 rows;
+      95% is 36 Eligible and two PR Partial; 99% remains DiagnosticOnly.
+      LOSO is structurally strong at 90/95, but date-cluster and contamination
+      sensitivity prevent empirical correction promotion. SB/BW/date-balanced
+      comparisons have no explicit direction reversal, although four rows
+      leave the frozen [0.5,2] inner sensitivity band. The 5.1 weight/refit
+      analyses also have no direction reversal; at 90%, 34 rows PASS, three
+      are PARTIAL, and the high-support conditioned-Phase row FAILS the 5.1
+      dominance traffic light. No final calibrator, runtime parameter, or
+      normative correction was produced.
+
+All stages remain bound by the Generalization Contract: no dataset-4.1-fitted
+coefficients, event thresholds, GT/APE, route/location rules, PRN-specific
+reliability priors/thresholds/control laws, or fixed weighted sum selected on
+this dataset. Satellite identity remains available for required association,
+grouping, continuity, indexing, and diagnostics. All evidence used by the
+first solve must be available before that solve. No code, weighting,
+covariance adaptation, gating, or temporal trust is authorized yet.
 
 ---
 
@@ -430,9 +782,29 @@ cross-source trust until this shadow evidence has been evaluated.
 - [x] Stage 3A.0 E0/E1/E2 repeatability validation reported PASS
 - [x] Stage 3A.1a conditional evidence shadow implemented at `2e25400`
 - [x] ambiguity-provenance result-type compile fix committed at `0a732d6`
+- [x] successful Stage 3A.1a post-fix compilation reported by the user
+- [x] Stage 3A.1a OFF/C0/C1/C2 runs completed
+- [x] Stage 3A.1a implementation-sanity and repeatability analysis completed
+- [x] Stage 3A.1a classified as PARTIAL PASS
 - [x] current `git diff --check`
-- [ ] successful Stage 3A.1a compilation after `0a732d6`
-- [ ] Stage 3A.1a optimizer-invariance run
-- [ ] Stage 3A.1a conditional evidence CSV sanity checks
-- [ ] Stage 3A.1a repeatability assessment
-- [ ] cross-dataset conditional-evidence validation
+- [x] Stage 3A.1b-0 semantic architecture DESIGN PASS
+- [x] Stage 3A.1b-0T 4.2 T0/T1/T2 formal analysis completed
+- [x] Stage 3A.1b-0T classified as PARTIAL PASS
+- [x] Stage 3A.1b-1a Structured Assessment Mathematical Contract FROZEN
+- [x] Stage 3A.1b-1b Analytic/Empirical/Hybrid comparison accepted
+- [x] Stage 3A.1b-1b.1 channel representation review completed with revision
+- [x] Stage 3A.1b-1b.2 offline calibration prototype specification FROZEN
+- [x] Stage 3A.1b-1b.3 offline prototype pre-registration FROZEN
+- [x] Stage 3A.1b-1b.3 offline prototype execution and analysis: PARTIAL
+- [x] Stage 3A.1b-1b.3R corrective execution integrity: PASS
+- [x] Stage 3A.1b calibration-prototype scientific outcome retained: PARTIAL
+- [x] Stage 3A.1b-1b.4 metadata-only inventory and data-role split frozen
+- [x] Stage 3A.1b-1b.4b no-fit sanity/provenance/support audit executed
+- [x] accept user-confirmed 3.1/4.3 frozen-shadow run provenance while retaining
+  the explicit non-artifact-bound limitation
+- [x] Stage 3A.1b-1b.4b-R1 new 5.1 admission: EligibleForPanel
+- [x] retain old 5.1 as superseded and obtain final Stage 4b panel PASS
+- [x] Stage 3A.1b-1b.4c-P multi-session prototype preregistration FROZEN
+- [x] Stage 3A.1b-1b.4c-E execution integrity: PASS
+- [x] Stage 3A.1b-1b.4c-E scientific outcome: PARTIAL
+- [ ] environment-stratified and future hold-out validation

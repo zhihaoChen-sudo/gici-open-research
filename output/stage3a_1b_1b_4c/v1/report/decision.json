@@ -1,0 +1,24 @@
+{
+  "5.2_read": false,
+  "ExecutionIntegrity": "PASS",
+  "GT_APE_AR_FIX_read": false,
+  "ScientificOutcome": "PARTIAL",
+  "Stage3A1b1b4cP": "FROZEN",
+  "date_clusters": 3,
+  "full_panel_99_support_prerequisite_rows": 10,
+  "manifest_id": "S3A1b1b4cP-v1",
+  "online_cpp_or_config_changed": false,
+  "preregistration_deviations": [
+    {
+      "detail": "4.2:T1;4.2:T2",
+      "frozen_rule_changed": false,
+      "handling": "NotAssessed; no substitute, refit, rerun, or parameter change",
+      "scope": "4.1/4.2 repeat sensitivity",
+      "type": "input_artifact_unavailable"
+    }
+  ],
+  "primary_sequences": 11,
+  "promotion_eligible_rows": 0,
+  "promotion_total_rows": 114,
+  "threshold_or_rule_changed_after_results": false
+}

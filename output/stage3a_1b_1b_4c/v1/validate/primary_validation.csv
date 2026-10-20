@@ -1,0 +1,12 @@
+sequence,primary_run,source_epochs,doppler_system_rows,source_timestamp_order_unique,doppler_timestamp_order,pr_count_closure,phase_provenance_count_closure,doppler_count_closure,source_evaluation_failures,doppler_system_evaluation_failures,forbidden_columns_loaded
+1.1,S0,1797,7188,True,True,True,True,True,0,0,False
+1.2,S0,1446,5689,True,True,True,True,True,0,0,False
+2.1,S0,3863,15285,True,True,True,True,True,0,0,False
+2.2,S0,1618,6466,True,True,True,True,True,0,0,False
+3.1,S0,4715,18763,True,True,True,True,True,0,0,False
+3.2,S0,4075,15973,True,True,True,True,True,0,0,False
+3.3,S0,5093,20126,True,True,True,True,True,0,0,False
+4.1,C0,3928,15411,True,True,True,True,True,0,0,False
+4.2,T0,2340,8557,True,True,True,True,True,0,0,False
+4.3,S0,4200,16573,True,True,True,True,True,0,0,False
+5.1,R1,22664,87711,True,True,True,True,True,0,0,False

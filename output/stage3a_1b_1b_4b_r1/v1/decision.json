@@ -1,0 +1,73 @@
+{
+  "calibrator_fitting": false,
+  "dataset_5.2_read": false,
+  "overall": "PASS",
+  "provenance_limit": "CSV/config/input metadata are hashed or fingerprinted, but no run artifact binds the actual executable hash; current config is not automatically the run config.",
+  "reference_doppler_system_masks": [
+    "C",
+    "CE",
+    "CEG",
+    "CEGR",
+    "CER",
+    "CG",
+    "CGR",
+    "CR",
+    "E",
+    "EG",
+    "ER",
+    "G",
+    "R"
+  ],
+  "reference_pr_masks": [
+    "110",
+    "111"
+  ],
+  "schema_identical_across_runs": {
+    "doppler": true,
+    "preopt": true,
+    "source": true
+  },
+  "sequences": [
+    {
+      "classification": "EligibleForPanel",
+      "closure_failures_max_per_run": 0,
+      "doppler_factors_per_run": "123037;123037;123045",
+      "evaluation_failures_max_per_run": 0,
+      "evidence_epochs_per_run": "3928;3928;3928",
+      "notes": "",
+      "phase_factors_per_run": "71617;71617;71617",
+      "pr_factors_per_run": "87809;87809;87809",
+      "representative_physical_epoch_count": 3928,
+      "run_count": 3,
+      "sequence": "4.1"
+    },
+    {
+      "classification": "EligibleForPanel",
+      "closure_failures_max_per_run": 0,
+      "doppler_factors_per_run": "66111;66109;66103",
+      "evaluation_failures_max_per_run": 0,
+      "evidence_epochs_per_run": "2340;2340;2340",
+      "notes": "",
+      "phase_factors_per_run": "36898;36898;36898",
+      "pr_factors_per_run": "48929;48929;48929",
+      "representative_physical_epoch_count": 2340,
+      "run_count": 3,
+      "sequence": "4.2"
+    },
+    {
+      "classification": "EligibleForPanel",
+      "closure_failures_max_per_run": 0,
+      "doppler_factors_per_run": "1118458",
+      "evaluation_failures_max_per_run": 0,
+      "evidence_epochs_per_run": "22664",
+      "notes": "",
+      "phase_factors_per_run": "734889",
+      "pr_factors_per_run": "865838",
+      "representative_physical_epoch_count": 22664,
+      "run_count": 1,
+      "sequence": "5.1"
+    }
+  ],
+  "stage": "Stage 3A.1b-1b.4b-R1",
+  "support_domain_scope": "prototype support-domain only, not complete CalibrationApplicability"
+}

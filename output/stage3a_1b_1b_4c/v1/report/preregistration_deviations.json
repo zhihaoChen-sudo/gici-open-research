@@ -1,0 +1,11 @@
+{
+  "deviations": [
+    {
+      "detail": "4.2:T1;4.2:T2",
+      "frozen_rule_changed": false,
+      "handling": "NotAssessed; no substitute, refit, rerun, or parameter change",
+      "scope": "4.1/4.2 repeat sensitivity",
+      "type": "input_artifact_unavailable"
+    }
+  ]
+}

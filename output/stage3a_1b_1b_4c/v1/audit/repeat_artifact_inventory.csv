@@ -1,0 +1,7 @@
+sequence,run,root,available,source_path,doppler_path,status
+4.1,C0,/home/czh/Projects/gici-data/实验_raw/4.1实验,True,/home/czh/Projects/gici-data/实验_raw/4.1实验/gnss_source_reliability_evidence-20260827-111645.csv,/home/czh/Projects/gici-data/实验_raw/4.1实验/gnss_doppler_system_evidence-20260827-111645.csv,Available
+4.1,C1,/home/czh/Projects/gici-data/4.1/实验/Stage3A.1a/C1,True,/home/czh/Projects/gici-data/4.1/实验/Stage3A.1a/C1/gnss_source_reliability_evidence-20260827-105913.csv,/home/czh/Projects/gici-data/4.1/实验/Stage3A.1a/C1/gnss_doppler_system_evidence-20260827-105913.csv,Available
+4.1,C2,/home/czh/Projects/gici-data/4.1/实验/Stage3A.1a/C2,True,/home/czh/Projects/gici-data/4.1/实验/Stage3A.1a/C2/gnss_source_reliability_evidence-20260827-110500.csv,/home/czh/Projects/gici-data/4.1/实验/Stage3A.1a/C2/gnss_doppler_system_evidence-20260827-110500.csv,Available
+4.2,T0,/home/czh/Projects/gici-data/实验_raw/4.2实验,True,/home/czh/Projects/gici-data/实验_raw/4.2实验/gnss_source_reliability_evidence-20260827-123912.csv,/home/czh/Projects/gici-data/实验_raw/4.2实验/gnss_doppler_system_evidence-20260827-123912.csv,Available
+4.2,T1,/home/czh/Projects/gici-data/4.2/实验/T1,False,,,NotAssessed_missing_artifact
+4.2,T2,/home/czh/Projects/gici-data/4.2/实验/T2,False,,,NotAssessed_missing_artifact

@@ -1,0 +1,11 @@
+{
+  "corrections": [
+    {
+      "correction": "Before final reporting, reran repeat audit with frozen paired 30-epoch block bootstrap, 2000 replicates, Fisher clipping, and simultaneous 95% CI for all channel coordinates.",
+      "frozen_parameter_or_rule_changed": false,
+      "issue": "Initial audit output contained repeat point estimates only.",
+      "result_driven_change": false,
+      "superseded_output_retained": false
+    }
+  ]
+}

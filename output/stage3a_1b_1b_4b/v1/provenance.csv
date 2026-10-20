@@ -1,0 +1,16 @@
+sequence,run,status,errors,sha256,config_precedes_evidence,semantic_match_to_4.1,binary_binding,candidate_binary
+1.1,S0,MetadataLinked,,2b1168c9f66242e6150d698a98597533580c15862ede0be175a94b0a0116572a,True,True,unverified,/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main
+1.2,S0,MetadataLinked,,bb333bdd36d2f67c3b77d4bf309e169daa08317fa5297b0c1ae5ef9ac7fb8656,True,True,unverified,/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main
+2.1,S0,MetadataLinked,,6af91ff178e7ac0df1bc0d032ba7019089b44142138171a3da456e5697acb2c5,True,True,unverified,/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main
+2.2,S0,MetadataLinked,,bacfea28efac3c5578699261b1cba182fcff3387e9b6e92ec829fa4eb835a62a,True,True,unverified,/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main
+3.1,S0,AcceptedWithUserReportedRunConfig,,43b0c1e9d69d6c39abca0ba1e2ed55c52bf949f6e1b2e505880da20f4610dd23,False,True,unverified,/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main
+3.2,S0,MetadataLinked,,d8f0edcd9511a27081aad7a0f950e250a287651df66e8d289fdc54ea67edfce1,True,True,unverified,/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main
+3.3,S0,MetadataLinked,,98025ab0dc84c4c8b55829815b8174ea7a62a11cbbfc1c107ec4127f4c92a09c,True,True,unverified,/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main
+4.1,C0,AcceptedWithUserReportedRunConfig,,f5739a3e9d4d9222e3e9b4349a0d37942d6d3f34718fb3ca51dafe0e4221a090,False,True,unverified,/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main
+4.1,C1,AcceptedWithUserReportedRunConfig,,f5739a3e9d4d9222e3e9b4349a0d37942d6d3f34718fb3ca51dafe0e4221a090,False,True,unverified,/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main
+4.1,C2,AcceptedWithUserReportedRunConfig,,f5739a3e9d4d9222e3e9b4349a0d37942d6d3f34718fb3ca51dafe0e4221a090,False,True,unverified,/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main
+4.2,T0,AcceptedWithUserReportedRunConfig,,e91752f4b9bd8cb47d4d689f222ccbd18ccbf8a12446dfd282bc488879b5dc93,False,True,unverified,/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main
+4.2,T1,AcceptedWithUserReportedRunConfig,,e91752f4b9bd8cb47d4d689f222ccbd18ccbf8a12446dfd282bc488879b5dc93,False,True,unverified,/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main
+4.2,T2,AcceptedWithUserReportedRunConfig,,e91752f4b9bd8cb47d4d689f222ccbd18ccbf8a12446dfd282bc488879b5dc93,False,True,unverified,/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main
+4.3,S0,AcceptedWithUserReportedRunConfig,,7d23938591a073d108b5e50d91559377ddef222566e5d9d94990b8fd537f27dc,False,True,unverified,/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main
+5.1,S0,Unbound,,19bc7ac3001aa51aa81623f8179ab6bfe412a7744566cdc7e01e9e2c9231de48,False,True,unverified,/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main

@@ -1,0 +1,11 @@
+{
+  "Doppler": "fixed C/E/G/R slots and valid mask; abs center quality; signed direction attribution",
+  "PR": "three-coordinate multivariate partial order; no mandatory scalar",
+  "Phase": "conditioned P90 one-sided upper tail",
+  "artifact_limits": {
+    "doppler": "fullest_available_prototype",
+    "phase_factor_level_conditioned_s0": "ApproximateMechanics",
+    "pr_exact_natural_group_s0": "ApproximateMechanics",
+    "retrospective_binary_binding": "unproven_but_not_panel_admission_blocker"
+  }
+}

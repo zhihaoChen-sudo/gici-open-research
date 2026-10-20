@@ -1,0 +1,113 @@
+manifest_id: S3A1b1b4b-v1
+stage: Stage 3A.1b-1b.4b
+status: frozen_for_sanity_execution
+purpose: development_panel_evidence_sanity_provenance_support_audit
+not_runtime_parameter: true
+calibrator_fitting: false
+forbidden_inputs:
+  - dataset_5.2
+  - GT
+  - APE
+  - trajectory_solution
+  - post_fit_residual
+  - AR_FIX_FLOAT
+  - rejection_event
+  - event_label
+allowed_csv_basenames:
+  - gnss_source_reliability_evidence
+  - gnss_doppler_system_evidence
+  - gnss_preopt_residual_diagnostics
+output_root: output/stage3a_1b_1b_4b/v1
+reference_sequences: ["4.1", "4.2"]
+classification:
+  reject_on:
+    - missing_required_file
+    - schema_or_row_width_failure
+    - timestamp_order_failure
+    - count_or_ratio_closure_failure
+    - factor_summary_count_disagreement
+  partial_on:
+    - nonzero_evaluation_failure
+    - unexpected_nonfinite
+    - no_channel_assessment_availability
+    - config_provenance_conflict_or_unbound
+  informational_only:
+    - support_outside_4.1_4.2_range
+    - unseen_valid_mask
+    - unseen_doppler_system_mask
+    - low_quality_or_high_inconsistency
+sequences:
+  "1.1":
+    acquisition_date: 2023-03-20
+    config: /home/czh/Projects/gici-data/1.1/post_estimation_RTK_RRR.yaml
+    runs:
+      S0: /home/czh/Projects/gici-data/实验/1.1
+  "1.2":
+    acquisition_date: 2023-03-27
+    config: /home/czh/Projects/gici-data/1.2/post_estimation_RTK_RRR.yaml
+    runs:
+      S0: /home/czh/Projects/gici-data/实验/1.2
+  "2.1":
+    acquisition_date: 2023-03-20
+    config: /home/czh/Projects/gici-data/2.1/post_estimation_RTK_RRR.yaml
+    runs:
+      S0: /home/czh/Projects/gici-data/实验/2.1
+  "2.2":
+    acquisition_date: 2023-03-27
+    config: /home/czh/Projects/gici-data/2.2/post_estimation_RTK_RRR.yaml
+    runs:
+      S0: /home/czh/Projects/gici-data/实验/2.2
+  "3.1":
+    acquisition_date: 2023-03-27
+    config: /home/czh/Projects/gici-data/3.1/post_estimation_RTK_RRR.yaml
+    accepted_prior_user_reported_provenance: true
+    current_config_is_run_config: false
+    runs:
+      S0: /home/czh/Projects/gici-data/实验/3.1
+  "3.2":
+    acquisition_date: 2023-03-27
+    config: /home/czh/Projects/gici-data/3.2/post_estimation_RTK_RRR.yaml
+    runs:
+      S0: /home/czh/Projects/gici-data/实验/3.2
+  "3.3":
+    acquisition_date: 2023-03-27
+    config: /home/czh/Projects/gici-data/3.3/post_estimation_RTK_RRR.yaml
+    runs:
+      S0: /home/czh/Projects/gici-data/实验/3.3
+  "4.1":
+    acquisition_date: 2023-05-21
+    config: /home/czh/Projects/gici-data/4.1/post_estimation_RTK_RRR.yaml
+    accepted_prior_user_reported_provenance: true
+    runs:
+      C0: /home/czh/Projects/gici-data/实验/4.1实验/C0
+      C1: /home/czh/Projects/gici-data/实验/4.1实验/C1
+      C2: /home/czh/Projects/gici-data/实验/4.1实验/C2
+  "4.2":
+    acquisition_date: 2023-03-27
+    config: /home/czh/Projects/gici-data/4.2/post_estimation_RTK_RRR.yaml
+    accepted_prior_user_reported_provenance: true
+    runs:
+      T0: /home/czh/Projects/gici-data/实验/4.2实验/T0
+      T1: /home/czh/Projects/gici-data/实验/4.2实验/T1
+      T2: /home/czh/Projects/gici-data/实验/4.2实验/T2
+  "4.3":
+    acquisition_date: 2023-03-27
+    config: /home/czh/Projects/gici-data/4.3/post_estimation_RTK_RRR.yaml
+    accepted_prior_user_reported_provenance: true
+    runs:
+      S0: /home/czh/Projects/gici-data/实验/4.3
+  "5.1":
+    acquisition_date: 2023-05-21
+    config: /home/czh/Projects/gici-data/5.1/post_estimation_RTK_RRR.yaml
+    long_duration_stratum: true
+    runs:
+      S0: /home/czh/Projects/gici-data/实验/5.1
+candidate_binary:
+  path: /home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main
+  actual_run_binding: unverified
+expected_shadow_flags:
+  use_cauchy_loss_for_dd_pseudorange: false
+  estimate_reliability_for_dd_pseudorange: false
+  apply_reliability_weight_for_dd_pseudorange: false
+  estimate_gnss_source_reliability: true
+  log_intermediate_data: true

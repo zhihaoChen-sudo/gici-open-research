@@ -1,0 +1,11 @@
+{
+  "admission_dependency": "none; old/new comparison is diagnostic only",
+  "available_comparison": "frozen old aggregate descriptors versus new aggregate descriptors",
+  "old_raw_csv_available": false,
+  "old_raw_paths_recorded_by_prior_audit": [
+    "/home/czh/Projects/gici-data/\u5b9e\u9a8c/5.1/gnss_source_reliability_evidence-20260829-145853.csv",
+    "/home/czh/Projects/gici-data/\u5b9e\u9a8c/5.1/gnss_doppler_system_evidence-20260829-145853.csv",
+    "/home/czh/Projects/gici-data/\u5b9e\u9a8c/5.1/gnss_preopt_residual_diagnostics-20260829-145853.csv"
+  ],
+  "same_timestamp_repeatability": "NotAssessed: old per-epoch CSVs are absent"
+}

@@ -1,0 +1,92 @@
+manifest_id: S3A1b1b3-v1
+stage: Stage 3A.1b-1b.3
+status: frozen
+purpose: offline_calibration_prototype
+not_runtime_parameter: true
+forbidden_inputs:
+  - GT
+  - APE
+  - post_fit_residual
+  - AR_FIX_FLOAT
+  - event_time_rule
+  - route_identity_rule
+  - satellite_identity_prior
+  - dataset_5.2
+inputs:
+  4.1:
+    role: development
+    runs:
+      C0:
+        evidence: /home/czh/Projects/gici-data/4.1/实验/Stage3A.1a/C0/gnss_source_reliability_evidence-20260827-111645.csv
+        doppler_system: /home/czh/Projects/gici-data/4.1/实验/Stage3A.1a/C0/gnss_doppler_system_evidence-20260827-111645.csv
+      C1:
+        evidence: /home/czh/Projects/gici-data/4.1/实验/Stage3A.1a/C1/gnss_source_reliability_evidence-20260827-105913.csv
+        doppler_system: /home/czh/Projects/gici-data/4.1/实验/Stage3A.1a/C1/gnss_doppler_system_evidence-20260827-105913.csv
+      C2:
+        evidence: /home/czh/Projects/gici-data/4.1/实验/Stage3A.1a/C2/gnss_source_reliability_evidence-20260827-110500.csv
+        doppler_system: /home/czh/Projects/gici-data/4.1/实验/Stage3A.1a/C2/gnss_doppler_system_evidence-20260827-110500.csv
+  4.2:
+    role: development_transfer
+    runs:
+      T0:
+        evidence: /home/czh/Projects/gici-data/4.2/实验/T0/gnss_source_reliability_evidence-20260827-123912.csv
+        doppler_system: /home/czh/Projects/gici-data/4.2/实验/T0/gnss_doppler_system_evidence-20260827-123912.csv
+      T1:
+        evidence: /home/czh/Projects/gici-data/4.2/实验/T1/gnss_source_reliability_evidence-20260828-094645.csv
+        doppler_system: /home/czh/Projects/gici-data/4.2/实验/T1/gnss_doppler_system_evidence-20260828-094645.csv
+      T2:
+        evidence: /home/czh/Projects/gici-data/4.2/实验/T2/gnss_source_reliability_evidence-20260828-095109.csv
+        doppler_system: /home/czh/Projects/gici-data/4.2/实验/T2/gnss_doppler_system_evidence-20260828-095109.csv
+output_root: output/stage3a_1b_1b_3/v1
+statistics:
+  alpha_grid: [0.10, 0.05, 0.01]
+  synthetic_calibration_draws: 100000
+  synthetic_validation_draws: 100000
+  synthetic_seed_repeats: 20
+  synthetic_perturbation_draws: 20000
+  percentile_method: linear_n_minus_1
+  master_seed_hex: 0x3A1B1B3
+  rng: PCG64DXSM
+  child_seed: sha256_first_128_bits
+  bootstrap_replicates: 2000
+  confidence_level: 0.95
+  simultaneous_ci: max_studentized_transformed_block_bootstrap
+  fisher_rho_clip: 0.999999999999
+  timestamp_match_tolerance_seconds: 0.000001
+  block_sizes_epochs: [10, 30, 60]
+  primary_block_size_epochs: 30
+  trailing_block_min_fraction: 0.5
+  segment_gap_multiple: 2.5
+  contamination_epsilon_grid: [0.00, 0.05, 0.10, 0.20]
+  synthetic_perturbations:
+    location_magnitude: [0.0, 0.5, 1.0, 2.0, 4.0]
+    scale: [1.0, 1.25, 1.5, 2.0, 4.0]
+  synthetic_support_anchors: [min, q25, median, q75, max]
+  scalar_pair_samples: 100000
+diagnostic_traffic_lights:
+  not_runtime_parameter: true
+  not_final_calibration_threshold: true
+  not_physical_reliability_boundary: true
+  not_factor_control_threshold: true
+  spearman_stable_lower_ci: 0.80
+  direction_pass_fraction: 0.90
+  direction_partial_fraction: 0.75
+  effective_blocks_eligible: 20
+  effective_blocks_partial: 10
+  effective_tail_blocks_eligible: 10
+  effective_tail_blocks_partial: 5
+  correction_ratio_inner: [0.5, 2.0]
+  correction_ratio_outer: [0.25, 4.0]
+semantics:
+  real_membership_is_coverage: false
+  real_occupancy_is_transfer_pass_target: false
+  empirical_ratio_is_normative_correction: false
+  target_refit: false
+  missing_system_fill_zero: false
+  quality_acceptance: downward_closed
+  phase_quality_tail: upper_only
+  doppler_center_quality: absolute_magnitude
+artifact_limits:
+  pr_exact_natural_group_s0: mechanics_only
+  phase_factor_level_s0: mechanics_only
+  doppler: fullest_available_prototype

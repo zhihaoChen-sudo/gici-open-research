@@ -1,0 +1,12 @@
+sequence,classification,run_count,evidence_epochs_per_run,representative_physical_epoch_count,pr_factors_per_run,phase_factors_per_run,doppler_factors_per_run,evaluation_failures_max_per_run,closure_failures_max_per_run,notes
+1.1,EligibleForPanel,1,1797,1797,100865,82981,143582,0,0,
+1.2,EligibleForPanel,1,1446,1446,55392,48107,83997,0,0,
+2.1,EligibleForPanel,1,3863,3863,172521,138669,226577,0,0,
+2.2,EligibleForPanel,1,1618,1618,52323,43203,71390,0,0,
+3.1,EligibleForPanel,1,4715,4715,125547,108033,186053,0,0,
+3.2,EligibleForPanel,1,4075,4075,86000,71841,126924,0,0,
+3.3,EligibleForPanel,1,5093,5093,177522,145396,242574,0,0,
+4.1,EligibleForPanel,3,3928;3928;3928,3928,87809;87809;87809,71617;71617;71617,123037;123037;123045,0,0,
+4.2,EligibleForPanel,3,2340;2340;2340,2340,48929;48929;48929,36898;36898;36898,66111;66109;66103,0,0,
+4.3,EligibleForPanel,1,4200,4200,70197,60862,120098,0,0,
+5.1,EligibleForPanel,1,22664,22664,865838,734889,1118458,0,0,new R1 supersedes old rejected artifact

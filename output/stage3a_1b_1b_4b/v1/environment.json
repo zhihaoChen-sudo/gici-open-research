@@ -1,0 +1,11 @@
+{
+  "calibrator_fitting": false,
+  "candidate_binary_actual_run_binding": "unverified",
+  "candidate_binary_path": "/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main",
+  "candidate_binary_sha256": "fec7ac5f7e297f43a377cc69f0ed98636bbc6ae8883799dcaa9448867cf8742c",
+  "dataset_5.2_read": false,
+  "gt_ape_ar_fix_solution_read": false,
+  "manifest_sha256": "f08712762e1a22ffb677df00a944b0d08e8dbd20222d7bdaddce7f3f956a9472",
+  "source_branch": "exp/pseudorange-firstsolve-huber",
+  "source_head": "04909fb8c7e8bca5fa5ffda7cf043b0f7ed8414a"
+}

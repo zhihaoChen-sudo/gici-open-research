@@ -1,0 +1,13 @@
+channel,alpha,FoldAssessability,rows
+Doppler,0.01,AssessableForUpgradeReview,153
+Doppler,0.01,DiagnosticOnly,144
+Doppler,0.05,Assessable,297
+Doppler,0.1,Assessable,297
+PR,0.01,AssessableForUpgradeReview,41
+PR,0.01,DiagnosticOnly,47
+PR,0.05,Assessable,88
+PR,0.1,Assessable,88
+Phase,0.01,AssessableForUpgradeReview,24
+Phase,0.01,DiagnosticOnly,9
+Phase,0.05,Assessable,33
+Phase,0.1,Assessable,33

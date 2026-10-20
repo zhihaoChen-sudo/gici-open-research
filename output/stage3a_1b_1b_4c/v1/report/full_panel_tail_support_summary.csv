@@ -1,0 +1,11 @@
+channel,alpha,FullPanelTailStatus,rows
+Doppler,0.01,DiagnosticOnly,27
+Doppler,0.05,Eligible,27
+Doppler,0.1,Eligible,27
+PR,0.01,DiagnosticOnly,8
+PR,0.05,Eligible,6
+PR,0.05,Partial,2
+PR,0.1,Eligible,8
+Phase,0.01,DiagnosticOnly,3
+Phase,0.05,Eligible,3
+Phase,0.1,Eligible,3

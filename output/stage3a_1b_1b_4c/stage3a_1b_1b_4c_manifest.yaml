@@ -1,0 +1,288 @@
+manifest_id: S3A1b1b4cP-v1
+stage: Stage 3A.1b-1b.4c-P
+execution_stage: Stage 3A.1b-1b.4c-E
+status: frozen
+purpose: multi_session_channel_calibration_prototype
+not_runtime_parameter: true
+not_final_calibration_threshold: true
+not_physical_reliability_boundary: true
+not_factor_control_threshold: true
+
+forbidden_inputs:
+  - dataset_5.2
+  - GT
+  - APE
+  - EVO
+  - trajectory_solution
+  - post_fit_residual
+  - AR_FIX_FLOAT
+  - event_label
+  - route_identity_as_calibrator_feature
+  - sequence_or_date_identity_as_runtime_feature
+  - target_refit
+forbidden_actions:
+  - online_cpp_change
+  - gici_config_change
+  - temporal_trust
+  - factor_weighting
+
+output_root: output/stage3a_1b_1b_4c/v1
+platform: gici_same_platform_panel_v1
+primary_realization_rule: one_per_physical_sequence
+primary_realizations:
+  "1.1": {run: S0, acquisition_date: 2023-03-20, root: /home/czh/Projects/gici-data/实验_raw/1.1}
+  "1.2": {run: S0, acquisition_date: 2023-03-27, root: /home/czh/Projects/gici-data/实验_raw/1.2}
+  "2.1": {run: S0, acquisition_date: 2023-03-20, root: /home/czh/Projects/gici-data/实验_raw/2.1}
+  "2.2": {run: S0, acquisition_date: 2023-03-27, root: /home/czh/Projects/gici-data/实验_raw/2.2}
+  "3.1": {run: S0, acquisition_date: 2023-03-27, root: /home/czh/Projects/gici-data/实验_raw/3.1}
+  "3.2": {run: S0, acquisition_date: 2023-03-27, root: /home/czh/Projects/gici-data/实验_raw/3.2}
+  "3.3": {run: S0, acquisition_date: 2023-03-27, root: /home/czh/Projects/gici-data/实验_raw/3.3}
+  "4.1": {run: C0, acquisition_date: 2023-05-21, root: /home/czh/Projects/gici-data/实验_raw/4.1实验}
+  "4.2": {run: T0, acquisition_date: 2023-03-27, root: /home/czh/Projects/gici-data/实验_raw/4.2实验}
+  "4.3": {run: S0, acquisition_date: 2023-03-27, root: /home/czh/Projects/gici-data/实验_raw/4.3}
+  "5.1": {run: R1, acquisition_date: 2023-05-21, root: /home/czh/Projects/gici-data/实验_raw/5.1, long_duration_stratum: true}
+
+acquisition_date_clusters:
+  "2023-03-20": ["1.1", "2.1"]
+  "2023-03-27": ["1.2", "2.2", "3.1", "3.2", "3.3", "4.2", "4.3"]
+  "2023-05-21": ["4.1", "5.1"]
+
+repeat_sensitivity:
+  policy: nested_repeats_do_not_add_panel_weight
+  missing_artifact_policy: report_NotAssessed_without_substitution
+  "4.1":
+    C0: /home/czh/Projects/gici-data/实验_raw/4.1实验
+    C1: /home/czh/Projects/gici-data/4.1/实验/Stage3A.1a/C1
+    C2: /home/czh/Projects/gici-data/4.1/实验/Stage3A.1a/C2
+  "4.2":
+    T0: /home/czh/Projects/gici-data/实验_raw/4.2实验
+    T1: /home/czh/Projects/gici-data/4.2/实验/T1
+    T2: /home/czh/Projects/gici-data/4.2/实验/T2
+
+input_selection:
+  source_glob: gnss_source_reliability_evidence-*.csv
+  doppler_glob: gnss_doppler_system_evidence-*.csv
+  exactly_one_match_per_primary_root: true
+  preopt_required: false
+
+coordinate_contract:
+  pr_p90_abs_normalized:
+    channel: PR
+    current_evidence_coordinate: pr_p90_abs_normalized
+    primary_support_variable: pr_finite_success_count
+    secondary_support_context: [pr_evaluation_attempt_count, pr_evaluation_failure_count, pr_group_count, pr_group_eligible_count, pr_factor_eligible_count, pr_insufficient_factor_ratio]
+    s0_construction: p90_linear_of_abs_iid_standard_normal_over_n_finite_factors
+    q_nominal_rule: deterministic_monte_carlo_upper_quantile_at_rounded_cell_weighted_median_primary_support
+    nominal_reference_fidelity: Full
+    fidelity_scope: exact_statistic_under_declared_conditional_iid_standard_normal_S0_not_real_healthy_world
+  pr_group_shift_all_p90:
+    channel: PR
+    current_evidence_coordinate: pr_group_shift_all_p90
+    primary_support_variable: pr_group_count
+    secondary_support_context: [pr_finite_success_count, pr_group_eligible_count, pr_factor_eligible_count, pr_insufficient_factor_ratio]
+    s0_construction: p90_linear_of_absolute_group_medians_from_iid_standard_normal_residuals_partitioned_into_balanced_equal_size_proxy_groups
+    q_nominal_rule: deterministic_monte_carlo_upper_quantile_at_rounded_group_count_and_rounded_cell_weighted_median_factor_count
+    nominal_reference_fidelity: ApproximateMechanics
+    fidelity_limitation: exact_natural_DD_group_membership_and_group_sizes_are_not_in_epoch_summary_artifact
+  pr_group_scale_eligible_p90:
+    channel: PR
+    current_evidence_coordinate: pr_group_scale_eligible_p90
+    primary_support_variable: pr_group_eligible_count
+    secondary_support_context: [pr_factor_eligible_count, pr_group_count, pr_finite_success_count, pr_insufficient_factor_ratio]
+    s0_construction: p90_linear_of_max_1_and_1p4826_MAD_from_iid_standard_normal_residuals_partitioned_into_balanced_equal_size_proxy_eligible_groups
+    q_nominal_rule: deterministic_monte_carlo_upper_quantile_at_rounded_eligible_group_count_and_rounded_cell_weighted_median_eligible_factor_count
+    nominal_reference_fidelity: ApproximateMechanics
+    fidelity_limitation: exact_natural_DD_eligible_group_membership_and_group_sizes_are_not_in_epoch_summary_artifact
+  phase_continuity_conditioned_p90_abs_normalized:
+    channel: Phase
+    current_evidence_coordinate: phase_continuity_conditioned_p90_abs_normalized
+    primary_support_variable: phase_continuity_conditioned_count
+    secondary_support_context: [phase_total_count, phase_both_continued_count, phase_both_continued_ratio, phase_both_new_ratio, phase_mixed_ratio, phase_any_slip_ratio, phase_unknown_ratio]
+    s0_construction: upper_tail_p90_linear_of_abs_iid_standard_normal_over_n_conditioned_factors
+    q_nominal_rule: deterministic_monte_carlo_upper_quantile_at_rounded_cell_weighted_median_primary_support
+    nominal_reference_fidelity: ApproximateMechanics
+    fidelity_limitation: factor_level_conditioning_selection_and_shared_state_path_dependence_are_not_reconstructable_from_epoch_summary
+  doppler_p90_abs_normalized:
+    channel: Doppler
+    current_evidence_coordinate: doppler_p90_abs_normalized
+    primary_support_variable: doppler_finite_success_count
+    secondary_support_context: [doppler_evaluation_attempt_count, doppler_evaluation_failure_count, doppler_system_count, doppler_minimum_system_support, doppler_median_system_support]
+    s0_construction: p90_linear_of_abs_iid_standard_normal_over_n_finite_factors
+    q_nominal_rule: deterministic_monte_carlo_upper_quantile_at_rounded_cell_weighted_median_primary_support
+    nominal_reference_fidelity: Full
+    fidelity_scope: exact_statistic_under_declared_conditional_iid_standard_normal_S0_not_real_healthy_world
+  doppler_system_center_abs:
+    channel: Doppler
+    current_evidence_coordinate: absolute_value_of_center_normalized_in_fixed_C_E_G_R_slot
+    primary_support_variable: doppler_system_finite_count
+    secondary_support_context: [doppler_system_factor_count, doppler_system_evaluation_failure_count, canonical_system_slot, valid_system_mask, doppler_system_count]
+    s0_construction: absolute_median_of_iid_standard_normal_over_n_system_factors
+    q_nominal_rule: deterministic_monte_carlo_upper_quantile_at_rounded_cell_weighted_median_primary_support
+    nominal_reference_fidelity: Full
+    fidelity_scope: exact_statistic_under_declared_conditional_iid_standard_normal_S0_not_real_healthy_world
+  doppler_system_scale:
+    channel: Doppler
+    current_evidence_coordinate: scale_normalized_in_fixed_C_E_G_R_slot
+    primary_support_variable: doppler_system_finite_count
+    secondary_support_context: [doppler_system_factor_count, doppler_system_evaluation_failure_count, canonical_system_slot, valid_system_mask, doppler_system_count]
+    s0_construction: 1p4826_times_MAD_about_median_of_iid_standard_normal_over_n_system_factors_without_floor
+    q_nominal_rule: deterministic_monte_carlo_upper_quantile_at_rounded_cell_weighted_median_primary_support
+    nominal_reference_fidelity: Full
+    fidelity_scope: exact_statistic_under_declared_conditional_iid_standard_normal_S0_not_real_healthy_world
+
+representation:
+  PR: multivariate_coordinate_preserving_partial_order
+  Phase: one_sided_upper_tail_scalar_conformity
+  Doppler: fixed_C_E_G_R_slots_with_valid_masks_and_coordinate_attribution
+  mandatory_scalar_R_PR: false
+  missing_system_fill_zero: false
+  quality_acceptance: downward_closed
+  signed_doppler_center_role: excursion_direction_only
+
+statistics:
+  alpha_grid: [0.10, 0.05, 0.01]
+  percentile_method: linear_n_minus_1
+  synthetic_calibration_draws: 100000
+  synthetic_validation_draws: 100000
+  synthetic_seed_repeats: 20
+  synthetic_perturbation_draws: 20000
+  master_seed_hex: 0x3A1B1B4C
+  rng: PCG64DXSM
+  child_seed: sha256_first_128_bits
+  bootstrap_replicates: 2000
+  confidence_level: 0.95
+  fisher_rho_clip: 0.999999999999
+  simultaneous_ci_method: max_studentized_log_ratio_temporal_block_bootstrap
+  simultaneous_ci_family: channel_x_analysis_mode_or_fold_x_aggregation
+  simultaneous_ci_family_members: all_preregistered_coordinate_x_support_cell_x_alpha
+  block_sizes_epochs: [10, 30, 60]
+  primary_block_size_epochs: 30
+  trailing_block_min_fraction: 0.5
+  inferential_minimum_block_epochs: 15
+  segment_gap_multiple: 2.5
+  contamination_epsilon_grid: [0.00, 0.05, 0.10, 0.20]
+  support_strata_probabilities: [0.3333333333333333, 0.6666666666666666]
+  support_boundary_estimator: training_only_equal_sequence_weighted_primary_support_tertiles
+  scalar_pair_samples: 100000
+
+aggregation:
+  primary:
+    name: sequence_balanced
+    definition: equal_physical_sequence_mixture_of_within_sequence_empirical_distributions
+    estimand: equal_sequence_development_panel_distribution
+    universal_healthy_distribution_claim: false
+  sensitivity:
+    block_weighted: equal_temporal_block_mixture_within_each_coordinate_cell
+    acquisition_date_cluster_aware: equal_date_cluster_then_equal_sequence_within_date_then_equal_epoch_within_sequence
+  full_panel_sensitivity_boundaries: frozen_primary_full_panel_support_boundaries
+  fold_boundaries: rebuild_from_training_fold_only
+  target_refit: false
+
+inferential_universe:
+  candidate_point_estimate: epochs_or_system_rows_inside_bootstrap_eligible_temporal_blocks_only
+  bootstrap: same_bootstrap_eligible_temporal_blocks_as_point_estimate
+  descriptive_all_epoch: may_include_trailing_blocks_shorter_than_15_epochs
+  blocks_never_cross: [physical_sequence, acquisition_date, realization]
+
+full_panel_tail_status:
+  alpha_0.10:
+    Eligible: {effective_blocks_min: 20, tail_blocks_min: 10, tail_sequences_min: 3, tail_dates_min: 2}
+    Partial: {effective_blocks_min: 10, tail_blocks_min: 5, tail_sequences_min: 2, tail_dates_min: 2}
+  alpha_0.05:
+    Eligible: {effective_blocks_min: 40, tail_blocks_min: 10, tail_sequences_min: 4, tail_dates_min: 3}
+    Partial: {effective_blocks_min: 20, tail_blocks_min: 5, tail_sequences_min: 3, tail_dates_min: 2}
+  alpha_0.01:
+    default: DiagnosticOnly
+    upgrade_review_only_if:
+      effective_blocks_min: 100
+      tail_blocks_min: 10
+      tail_sequences_min: 5
+      tail_dates_min: 3
+      without_5.1_effective_blocks_min: 50
+      without_5.1_tail_blocks_min: 5
+      without_5.1_tail_sequences_min: 4
+      without_5.1_tail_dates_min: 2
+      maximum_single_sequence_tail_share: 0.5
+      all_stability_criteria_pass: true
+  fallback:
+    DiagnosticOnly: {tail_blocks_min: 2}
+    otherwise: NotAssessed
+
+fold_assessability:
+  semantics: training_fold_candidate_assessability_not_full_panel_eligibility
+  alpha_0.10:
+    Assessable: {effective_blocks_min: 20, tail_blocks_min: 10, tail_sequences_min: 3, training_dates_min: 2}
+    Partial: {effective_blocks_min: 10, tail_blocks_min: 5, tail_sequences_min: 2, training_dates_min: 2}
+  alpha_0.05:
+    Assessable: {effective_blocks_min: 40, tail_blocks_min: 10, tail_sequences_min: 4, training_dates_min: 2}
+    Partial: {effective_blocks_min: 20, tail_blocks_min: 5, tail_sequences_min: 3, training_dates_min: 2}
+  alpha_0.01:
+    default: DiagnosticOnly
+    AssessableForUpgradeReview: {effective_blocks_min: 100, tail_blocks_min: 10, tail_sequences_min: 5, training_dates_min: 2, maximum_single_sequence_tail_share: 0.5}
+  fallback:
+    DiagnosticOnly: {tail_blocks_min: 2}
+    otherwise: NotAssessed
+
+bootstrap:
+  primary_resampling: resample_temporal_blocks_within_each_physical_sequence_then_form_equal_sequence_mixture
+  block_weighted_resampling: resample_temporal_blocks_within_each_physical_sequence_then_equal_block_mixture
+  date_balanced_resampling: resample_temporal_blocks_within_sequence_then_equal_date_and_equal_sequence_within_date_mixture
+  sequences_and_dates_are_not_iid_resampling_units: true
+  simultaneous_ci_frozen_after_results: false
+  neutral_direction_when_ci_contains_one: true
+  log_ratio_requires_strict_positive_finite: true
+  epsilon_added: false
+  contamination_hierarchy: temporal_block_envelope_within_each_physical_sequence_then_equal_sequence_mixture
+
+five_one_sensitivity:
+  weight_influence: full_panel_frozen_support_boundaries_remove_5.1_weight_only_without_refit
+  refit_influence: remove_5.1_and_rebuild_training_only_support_strata_nominal_reference_and_candidate
+  both_require_no_explicit_direction_reversal_for_promotion: true
+  tail_share_pass_max: 0.5
+  tail_share_partial_max: 0.75
+  ratio_inner: [0.5, 2.0]
+  ratio_outer: [0.25, 4.0]
+
+promotion_criteria:
+  output_label_only: EligibleForNormativeReview
+  never_automatic_normative_correction: true
+  nominal_reference_fidelity_required: Full
+  full_panel_tail_required: Eligible
+  loso_assessable_fraction_min: 0.8181818181818182
+  loso_direction_agreement_min: 0.90
+  leave_date_all_three_assessable: true
+  leave_date_direction_reversal_forbidden: true
+  repeat_direction_agreement_min: 0.90
+  aggregation_direction_reversal_forbidden: true
+  aggregation_ratio_inner: [0.5, 2.0]
+  contamination_epsilon_0.10_max_fold_width: 2.0
+  contamination_epsilon_0.20_max_fold_width: 4.0
+  five_one_non_dominance_required: true
+  support_or_applicability_blocker_forbidden: true
+  candidate_ratio_outer: [0.25, 4.0]
+  stable_neutral_interpretation: supports_no_nonunity_correction_not_promotion
+
+prototype_decision:
+  execution_integrity_separate_from_scientific_outcome: true
+  occupancy_is_pass_target: false
+  traffic_light_only: true
+  pass_requires:
+    - representation_semantics_preserved
+    - at_least_90_percent_sequence_balanced_valid_mass_in_90_percent_Eligible_cells_per_channel
+    - all_three_leave_date_folds_assessable_for_at_least_75_percent_mass
+    - no_5.1_dominance_or_aggregation_failure
+    - every_channel_has_promotion_eligible_coordinate_or_stable_neutral_conclusion
+  partial_if:
+    - execution_pass_but_support_stability_or_correction_identifiability_remains_unresolved
+  fail_if:
+    - execution_integrity_failure
+    - representation_semantic_failure
+    - two_or_more_channels_below_75_percent_Eligible_or_Partial_mass_at_90_percent_tail
+    - date_cluster_analysis_essentially_unassessable
+    - forbidden_information_required
+
+artifact_limitations:
+  pr_exact_natural_group_s0: ApproximateMechanics
+  phase_factor_level_conditioned_s0: ApproximateMechanics
+  doppler: fullest_available_prototype
+  retrospective_binary_binding: unproven_but_not_panel_admission_blocker

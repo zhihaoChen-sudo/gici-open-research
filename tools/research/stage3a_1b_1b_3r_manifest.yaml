@@ -1,0 +1,48 @@
+manifest_id: S3A1b1b3R-v1
+stage: Stage 3A.1b-1b.3R
+status: frozen_corrective_rerun
+parent_manifest: tools/research/stage3a_1b_1b_3_manifest.yaml
+parent_manifest_id: S3A1b1b3-v1
+correction_scope: repeat_hierarchy_only
+output_root: output/stage3a_1b_1b_3r/v1
+repeat_hierarchy:
+  physical_sequence_unit: dataset_sequence
+  nested_repeats:
+    4.1: [C0, C1, C2]
+    4.2: [T0, T1, T2]
+  source_calibration: per_repeat
+  target_application: per_repeat
+  transfer_matrix: 3x3_each_direction
+  source_bootstrap_scope: blocks_from_one_source_repeat_only
+  pair_independence_claim: forbidden
+  summary: median_range_run_sensitivity_only
+frozen_from_parent_without_change:
+  - representation
+  - quality_semantics
+  - alpha_grid
+  - support_stratification
+  - block_sizes_epochs
+  - bootstrap_replicates
+  - bootstrap_ci_method
+  - contamination_epsilon_grid
+  - tail_support_thresholds
+  - synthetic_model
+  - random_seed_policy
+forbidden_inputs:
+  - GT
+  - APE
+  - post_fit_residual
+  - AR_FIX_FLOAT
+  - dataset_5.2
+  - target_refit
+synthetic_s0:
+  action: reuse_unchanged
+  source: output/stage3a_1b_1b_3/v1/synthetic_s0
+audit_semantics:
+  within_run_state_pair_incomparability:
+    source: existing_pr_tradeoff_incomparability
+    meaning: random_pairs_of_distinct_or_equal_epoch_states_within_one_run
+    forbidden_interpretation: same_timestamp_repeat_disagreement
+  same_timestamp_repeat_pair_tradeoff:
+    source: all_timestamp_matched_repeat_pairs
+    meaning: coordinate_tradeoff_between_nested_repeats_at_same_timestamp

@@ -1,0 +1,11 @@
+{
+  "GT_APE_AR_FIX_read": false,
+  "forbidden_5.2_read": false,
+  "manifest_sha256": "6da158e3db5d288934b3cfd5ac3b9d0106045d1238f34ec345020aa44f39c0ed",
+  "matplotlib": "3.10.9",
+  "numpy": "2.2.6",
+  "pandas": "2.3.3",
+  "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35",
+  "python": "3.10.12 (main, Jun 22 2026, 18:55:27) [GCC 11.4.0]",
+  "scipy": "1.15.3"
+}

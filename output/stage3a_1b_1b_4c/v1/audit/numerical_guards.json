@@ -1,0 +1,6 @@
+{
+  "fisher_clipping_count": 0,
+  "fisher_rho_clip": 0.999999999999,
+  "log_ratio_epsilon_added": false,
+  "log_ratio_requires_strict_positive_finite": true
+}

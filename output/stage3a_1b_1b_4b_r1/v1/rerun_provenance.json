@@ -1,0 +1,59 @@
+{
+  "ambiguity_resolution_system_exclude": [
+    "R"
+  ],
+  "config": {
+    "binding": "user-reported run config; current file postdates evidence and is not artifact-bound",
+    "mtime_ns": 1788085402962919827,
+    "path": "/home/czh/Projects/gici-data/5.1/post_estimation_RTK_RRR.yaml",
+    "sha256": "99283f282f8ee14576f20cb970b61b3cf905b1dd00f01491fcd66205cf1b858b"
+  },
+  "evidence_schema": {
+    "doppler": "b8b06f483ee23334bd9f6e0169b47a46078b28ed1519ea493526d9bad3768b11",
+    "preopt": "d158f16b30e018b53fb5fd3bfb4c8886d948875f00e606a679c7e7ebf2bc38ef",
+    "source": "79094160ffb3dcd1ecb34ea4cab9591fdcf06cb00ebcf25011bfb99d99dd997b"
+  },
+  "executable": {
+    "current_sha256": "fec7ac5f7e297f43a377cc69f0ed98636bbc6ae8883799dcaa9448867cf8742c",
+    "mtime_ns": 1787825950149641530,
+    "path": "/home/czh/Projects/gici-open/ros_wrapper/devel/lib/gici_ros/gici_ros_main",
+    "run_binding": "binary binding cannot be proven retrospectively"
+  },
+  "gnss_lever_arm_m": [
+    -0.035,
+    0.354,
+    -0.042
+  ],
+  "measurement_covariance_configuration": {
+    "current_config_sha256_record_only": true,
+    "gnss_common": {
+      "min_SNR": [
+        35.0,
+        30.0
+      ],
+      "min_elevation": 12.0
+    },
+    "implicit_or_default_noise_parameters": "not separately run-bound",
+    "max_doppler_error": 0.5,
+    "max_pesudorange_error": 4.0,
+    "max_phaserange_error": 0.06,
+    "reject_one_outlier_once": false,
+    "use_outlier_rejection": true
+  },
+  "output": {
+    "directory": "/home/czh/Projects/gici-data/\u5b9e\u9a8c_raw/5.1",
+    "filename_run_timestamp_token": "20260830-094329",
+    "source_file_mtime_ns": 1788085303682061335
+  },
+  "source_tree": {
+    "audit_HEAD": "04909fb8c7e8bca5fa5ffda7cf043b0f7ed8414a",
+    "run_commit_binding": "unproven"
+  },
+  "stage3a_flags": {
+    "apply_reliability_weight_for_dd_pseudorange": false,
+    "estimate_gnss_source_reliability": true,
+    "estimate_reliability_for_dd_pseudorange": false,
+    "log_intermediate_data": true,
+    "use_cauchy_loss_for_dd_pseudorange": false
+  }
+}
